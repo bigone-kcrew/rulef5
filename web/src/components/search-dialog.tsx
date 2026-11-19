@@ -68,7 +68,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             <select aria-label="결과 수" value={limit} onChange={(e) => setLimit(+e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm">{[15, 30, 50, 100].map((n) => <option key={n} value={n}>{n}건</option>)}</select>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <InstPicker lazy type={isGov ? profile.type : 'public-institution'} value={inst} onPick={(_, t) => setInst(t)} placeholder={isGov ? (profile.type === 'local-gov' ? '지자체(선택) 예: 경기도 수원시' : '부처(선택) 예: 고용노동부') : '기관(선택) 예: 근로복지공단'} />
+            <InstPicker lazy type={isGov ? profile.type : 'public-institution'} value={inst} onPick={(_, t) => setInst(t)} placeholder={isGov ? (profile.type === 'local-gov' ? '지방자치단체(선택) 예: 경기도 수원시' : '부처(선택) 예: 고용노동부') : '기관(선택) 예: 근로복지공단'} />
             {!isGov && <Input value={ministry} onChange={(e) => setMinistry(e.target.value)} maxLength={30} placeholder="주무부처(선택) 예: 고용노동부" />}
           </div>
         </form>

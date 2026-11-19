@@ -43,7 +43,7 @@ export default function AgentView() {
           {EXAMPLES.map((x) => <Button key={x} variant="outline" size="sm" className="h-auto max-w-full justify-start whitespace-normal py-1.5 text-left font-normal" onClick={() => setMsg(x)}>{x}</Button>)}
         </div>
         <Collapsible>
-          <CollapsibleTrigger render={<Button variant="link" size="sm" className="h-auto justify-start whitespace-normal px-0 text-left text-muted-foreground" />}>고급 옵션: 대상 규정을 미리 지정(부처·지자체 자료 올리기){picked ? ` · ${picked.doc.title || '선택됨'}` : ''}</CollapsibleTrigger>
+          <CollapsibleTrigger render={<Button variant="link" size="sm" className="h-auto justify-start whitespace-normal px-0 text-left text-muted-foreground" />}>고급 옵션: 대상 규정을 미리 지정(부처·지방자치단체 자료 올리기){picked ? ` · ${picked.doc.title || '선택됨'}` : ''}</CollapsibleTrigger>
           <CollapsibleContent><div className="pt-2"><TargetPicker onChange={setPicked} /></div></CollapsibleContent>
         </Collapsible>
       </section>

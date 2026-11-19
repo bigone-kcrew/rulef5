@@ -69,7 +69,7 @@ function HelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
           <li className="flex gap-3"><Keycap>F4</Keycap><span>무엇을 눌러야 할지 모르겠으면 <b>대화로 요청</b>에 하고 싶은 일을 문장으로 적으세요.</span></li>
           <li className="flex gap-3"><Keycap>키보드</Keycap><span>키보드 <b>F1~F10</b>으로도 메뉴를 엽니다. F5·F11·F12는 브라우저 기능(새로 고침·전체 화면·개발자 도구) 그대로입니다.</span></li>
           <li className="flex gap-3"><Keycap>F6–10</Keycap><span>필요할 때 쓰는 도구입니다: <b>법 개정 영향</b>·<b>기관 비교</b>·<b>규정 점검</b>·<b>일괄 개정</b>·<b>법령 체계</b>.</span></li>
-          <li className="flex gap-3"><Keycap>F11</Keycap><span><b>기관 설정</b>에서 기관 유형(공공기관·중앙행정기관·지방자치단체)과 기관명을 고르면 절차·문서 서식과 자료가 맞춰집니다(공공기관은 ALIO 내규, 부처·지자체는 법제처 행정규칙·자치법규). <b>F12</b>에서 AI 모델과 법제처 인증키를 바꿀 수 있습니다.</span></li>
+          <li className="flex gap-3"><Keycap>F11</Keycap><span><b>기관 설정</b>에서 기관 유형(공공기관·중앙행정기관·지방자치단체)과 기관명을 고르면 절차·문서 서식과 자료가 맞춰집니다(공공기관은 ALIO 내규, 부처·지방자치단체는 법제처 행정규칙·자치법규). <b>F12</b>에서 AI 모델과 법제처 인증키를 바꿀 수 있습니다.</span></li>
           <li className="flex gap-3"><Keycap>알림</Keycap><span>AI가 작업하는 동안 화면을 지켜보지 않아도 됩니다.<br /><b>담당자 확인</b>이 필요하면 부드러운 알림음(세 음)이, 끝나면 두 음이 울리고 다른 탭에 있으면 탭 제목에도 표시됩니다. 머리글의 종 단추로 끌 수 있습니다(기본: 켜짐).</span></li>
           <li className="flex gap-3"><Keycap>검색</Keycap><span>머리글의 <b>검색</b>(Ctrl+K)은 AI 없이 내규·법령·단체협약·공시자료를 바로 찾습니다.<br />밑줄 친 문서 이름을 누르면 <b>원문</b>(해당 조항·문서 전체)이 열립니다.</span></li>
         </ol>

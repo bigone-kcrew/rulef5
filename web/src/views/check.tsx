@@ -34,7 +34,7 @@ export default function CheckView() {
           <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline"><ToggleGroupItem value="docs">규정 선택·업로드</ToggleGroupItem><ToggleGroupItem value="inst">{gov ? `우리 기관 ${word} 전체` : 'ALIO 기관 전체'}</ToggleGroupItem></ToggleGroup>
           {mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : (
             <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="min-w-0 flex-1"><InstPicker lazy type={profile.type} value={inst} placeholder={gov ? (profile.type === 'local-gov' ? '지자체명(예: 경기도 수원시)' : '부처명(예: 고용노동부)') : '기관명(ALIO 공시 기관명)'} onPick={(_, t) => setInst(t)} /></div>
+              <div className="min-w-0 flex-1"><InstPicker lazy type={profile.type} value={inst} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시)' : '부처명(예: 고용노동부)') : '기관명(ALIO 공시 기관명)'} onPick={(_, t) => setInst(t)} /></div>
               {gov && <Input className="sm:w-64" value={kw} onChange={(e) => setKw(e.target.value)} maxLength={30} placeholder="제명 낱말로 좁히기(예: 복무, 문서) — 선택" />}
             </div>
           )}

@@ -27,7 +27,7 @@ export default function BulkView() {
         <CardHeader><StepTitle n={1}>대상 규정</StepTitle><CardDescription>바꿀 규정 묶음을 올리거나 ALIO 기관 전체를 고릅니다.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
           <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline"><ToggleGroupItem value="docs">규정 선택·업로드</ToggleGroupItem><ToggleGroupItem value="inst">{gov ? `우리 기관 ${word} 전체` : 'ALIO 기관 전체'}</ToggleGroupItem></ToggleGroup>
-          {mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : <InstPicker lazy type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지자체명(예: 경기도 수원시) — 법제처 자치법규' : '부처명(예: 고용노동부) — 법제처 행정규칙') : '기관명(ALIO 공시 기관명)'} />}
+          {mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : <InstPicker lazy type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시) — 법제처 자치법규' : '부처명(예: 고용노동부) — 법제처 행정규칙') : '기관명(ALIO 공시 기관명)'} />}
         </CardContent>
       </Card>
       <Card>

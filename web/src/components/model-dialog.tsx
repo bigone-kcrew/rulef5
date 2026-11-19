@@ -54,7 +54,7 @@ export function ModelDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         <FieldGroup className="border-t pt-4">
           <Field>
             <FieldLabel htmlFor="md-oc">법제처 Open API 인증키(OC) <span className="font-normal text-muted-foreground">(선택)</span></FieldLabel>
-            <Input id="md-oc" type="password" autoComplete="off" placeholder={serverLaw ? '비우면 서버 연결 사용' : '서버 연결 없음 — 넣어야 부처·지자체 기능 사용'} value={oc} onChange={(e) => setOc(e.target.value.trim())} aria-invalid={!ocOk} />
+            <Input id="md-oc" type="password" autoComplete="off" placeholder={serverLaw ? '비우면 서버 연결 사용' : '서버 연결 없음 — 넣어야 부처·지방자치단체 기능 사용'} value={oc} onChange={(e) => setOc(e.target.value.trim())} aria-invalid={!ocOk} />
             <FieldDescription>
               {serverLaw ? '● 지금은 공개 서버의 법제처 연결을 씁니다.' : '○ 서버에 법제처 연결이 없습니다.'} 본인 인증키를 넣으면 행정규칙·자치법규·법령 조회를 그 키로 합니다(국가법령정보 공동활용 open.law.go.kr에서 신청, 보통 가입 이메일의 아이디). 키는 이 탭에만 보관합니다.
               {!ocOk && <span className="block text-destructive">영문·숫자·.-_@ 2~60자만 넣을 수 있습니다.</span>}

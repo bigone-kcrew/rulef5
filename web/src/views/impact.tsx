@@ -111,7 +111,7 @@ export default function ImpactView() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field><FieldLabel htmlFor="im-t">주제(선택)</FieldLabel><Input id="im-t" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="예: 배우자 출산휴가" /><FieldDescription>비우면 개정 후 문구에서 뽑습니다.</FieldDescription></Field>
-              <Field><FieldLabel htmlFor="im-i">기관 범위(선택)</FieldLabel><InstPicker lazy id="im-i" type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? `${profile.type === 'local-gov' ? '지자체명' : '부처명'} — 비우면 전체 ${profile.type === 'local-gov' ? '자치법규' : '행정규칙'}` : '기관명 — 비우면 전체 공공기관'} /><FieldDescription>{gov ? `법제처 ${profile.type === 'local-gov' ? '자치법규' : '행정규칙'}에서 찾습니다.` : 'ALIO 공시 공공기관 내규에서 찾습니다.'}</FieldDescription></Field>
+              <Field><FieldLabel htmlFor="im-i">기관 범위(선택)</FieldLabel><InstPicker lazy id="im-i" type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? `${profile.type === 'local-gov' ? '지방자치단체명' : '부처명'} — 비우면 전체 ${profile.type === 'local-gov' ? '자치법규' : '행정규칙'}` : '기관명 — 비우면 전체 공공기관'} /><FieldDescription>{gov ? `법제처 ${profile.type === 'local-gov' ? '자치법규' : '행정규칙'}에서 찾습니다.` : 'ALIO 공시 공공기관 내규에서 찾습니다.'}</FieldDescription></Field>
             </div>
           </FieldGroup>
           <div className="mt-4 flex justify-end"><Button size="lg" disabled={!before.trim() || !after.trim() || job.busy} onClick={() => job.start('impact', { law_name: law, before: { text: before }, after: { text: after }, topic, org_type: profile.type, scope: { inst: inst || undefined }, auto: true })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}영향 조문 찾기</Button></div>

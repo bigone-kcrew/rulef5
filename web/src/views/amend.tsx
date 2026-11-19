@@ -22,7 +22,7 @@ export function AmendForm({ preset, busy, onRun }: { preset?: AmendPreset | null
     <div className="flex flex-col gap-8">
       <section className="flex flex-col gap-3">
         <StepTitle n={1}>고칠 규정을 고르세요</StepTitle>
-        <p className="text-sm text-muted-foreground">공공기관은 ALIO에서 찾고, 부처·지자체는 파일을 올리거나 원문을 붙여넣습니다.</p>
+        <p className="text-sm text-muted-foreground">공공기관은 ALIO, 중앙행정기관·지방자치단체는 법제처 행정규칙·자치법규에서 찾거나 파일을 올립니다.</p>
         <TargetPicker onChange={setPicked} showArticles initialDocId={preset?.doc_id} initialRefs={preset?.refs} sources={lawTarget ? ['alio', 'upload', 'law'] : ['alio', 'upload']} />
       </section>
       <section className="flex flex-col gap-3">

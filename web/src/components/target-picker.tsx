@@ -135,7 +135,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
         </TabsContent>
         <TabsContent value="gov" className="pt-2">
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); searchGov() }}>
-            <Input className="w-56" placeholder={profile.type === 'local-gov' ? '지자체명(예: 경기도 수원시)' : '부처명(예: 고용노동부)'} value={org} onChange={(e) => setOrg(e.target.value)} maxLength={60} />
+            <Input className="w-56" placeholder={profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시)' : '부처명(예: 고용노동부)'} value={org} onChange={(e) => setOrg(e.target.value)} maxLength={60} />
             <Input className="min-w-40 flex-1" placeholder={profile.type === 'local-gov' ? '조례·규칙 제명 낱말(예: 복무, 문서)' : '훈령·예규·고시 제명 낱말(예: 공무직, 감사)'} value={kw} onChange={(e) => setKw(e.target.value)} maxLength={60} />
             <Button type="submit" disabled={loading === 'gov'}>{loading === 'gov' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
@@ -160,7 +160,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
             <Button type="submit" disabled={loading === 'law'}>{loading === 'law' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
           <div className="mt-2 flex flex-wrap gap-4 text-sm">
-            {[['law', '법령'], ['admrul', '행정규칙(부처)'], ['ordin', '자치법규(지자체)']].map(([v, l]) => <label key={v} className="flex items-center gap-2"><Checkbox checked={targets.includes(v)} onCheckedChange={(c) => setTargets(c ? [...targets, v] : targets.filter((x) => x !== v))} />{l}</label>)}
+            {[['law', '법령'], ['admrul', '행정규칙(부처)'], ['ordin', '자치법규(지방자치단체)']].map(([v, l]) => <label key={v} className="flex items-center gap-2"><Checkbox checked={targets.includes(v)} onCheckedChange={(c) => setTargets(c ? [...targets, v] : targets.filter((x) => x !== v))} />{l}</label>)}
           </div>
           {list('law')}
         </TabsContent>
