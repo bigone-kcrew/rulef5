@@ -32,8 +32,15 @@ export const TOOLS = {
       // 지자체·부처: 법제처 자치법규·행정규칙에서 우리 기관 규정을 찾는다
       const gt = govTarget(deps.profile?.type);
       if (gt && deps.sources.gov?.enabled) {
-        const org = str(a.inst, 60) || (/^예시 /.test(deps.profile?.name || '') ? '' : deps.profile?.name) || '';
-        const rows = org ? await deps.sources.gov.orgDocs({ target: gt, org, pages: 1, extra: keyword }) : await deps.sources.gov.search({ target: gt, keyword: keyword || '복무', body: false, pages: 1 });
+        // 모델이 기관명을 줄여 쓰면(「수원시」) 설정한 기관의 정식 이름(「경기도 수원시」)으로 바꾼다
+        const pname = /^예시 /.test(deps.profile?.name || '') ? '' : (deps.profile?.name || '');
+        let org = str(a.inst, 60) || pname;
+        if (org && pname && pname !== org && pname.replace(/\s+/g, '').endsWith(org.replace(/\s+/g, ''))) org = pname;
+        // 규정명에 기관명이 붙어 있으면 떼고 찾는다(「수원시 공무원 당직…」 → 「공무원 당직…」)
+        const kw = keyword.replace(new RegExp(`^(${[org, org.split(' ').pop()].filter(Boolean).map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\s*`), '').trim() || keyword;
+        let rows = org ? await deps.sources.gov.orgDocs({ target: gt, org, pages: 1, extra: kw }) : await deps.sources.gov.search({ target: gt, keyword: kw || '복무', body: false, pages: 1 });
+        // 기관 목록에서 못 찾으면 제명 검색으로 다시 찾고 기관 이름으로 거른다
+        if (!rows.length && kw) { const short = org.split(' ').pop(); rows = (await deps.sources.gov.search({ target: gt, keyword: kw, body: false, pages: 2 })).filter((x) => !short || String(x.inst_name || '').includes(short) || String(x.doc_title || '').includes(short)); }
         st.candidates = rows.slice(0, 8);
         if (!st.candidates.length) return { summary: `법제처 ${gt === 'ordin' ? '자치법규' : '행정규칙'}에서 결과 없음` };
         return { summary: `${st.candidates.length}개 문서(법제처): ${st.candidates.slice(0, 4).map((x) => `${x.inst_name} 「${x.doc_title}」`).join(', ')}` };
@@ -184,6 +191,8 @@ export const TOOLS = {
       // 규정을 불러온 뒤 「조문 번호를 알려 달라」는 질문은 묻지 않는다 — 개정 흐름이 조문을 찾고 없으면 새 조문으로 둔다
       if (st.doc && /조문\s*번호|몇\s*조|어느\s*조|해당\s*조(?:문|항)/.test(String(a.question || ''))) return { summary: '조문 번호는 묻지 않습니다. draft_amendment 를 refs 없이 실행하면 개정 흐름이 대상 조문을 찾고, 없으면 새 조문으로 둡니다.' };
       const opts = (Array.isArray(a.options) ? a.options : []).map((o) => str(String(o), 100)).filter(Boolean).slice(0, 6);
+      // 자동 실행(평가·스크립트)에서는 사람에게 묻지 않고 첫 선택지로 진행한다
+      if (ctx.input.auto) { const v = opts[0] || '예'; st.answers.push(v); return { summary: `자동 진행: ${v}` }; }
       const v = await ctx.gate({ id: `ask_${Date.now()}`, prompt: str(a.question, 200) || '확인해 주세요.', options: (opts.length ? opts : ['예', '아니요']).map((o, i) => ({ value: o, label: o, checked: i === 0 })) });
       st.answers.push(v);
       return { summary: `사용자 답: ${v}` };

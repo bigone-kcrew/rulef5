@@ -124,6 +124,8 @@ export async function runAgent(ctx) {
   if (st.result?.corrections?.length) sugg.unshift(`조 번호 이동으로 인용 정정 ${st.result.corrections.length}건이 필요합니다(문서 세트의 인용 정정 목록).`);
   if (st.result?.citing?.length) sugg.unshift(`변경 조문을 인용하는 조문 ${st.result.citing.length}건의 내용 정합성을 확인하세요.`);
   try { ctx.metric?.('agent', { intent: classify(input.message), tools: queue.filter((x) => x.done).map((x) => x.tool).join('>'), executed, replans, finished }); } catch { /* 지표는 작업을 막지 않는다 */ }
+  // 개정·제정 요청인데 문서를 만들지 못했으면, 모델 요약이 「완료」라고 해도 사실대로 알린다
+  if ((need === 'draft_amendment' || need === 'draft_enactment') && !st.result?.docset) finalSummary = `요청한 ${need === 'draft_amendment' ? '개정안' : '제정안'}을 만들지 못했습니다. ${st.doc ? '' : '대상 규정을 찾지 못했습니다. 기관명과 규정명을 정확히 적거나 F2에서 규정을 직접 골라 주세요.'}`.trim();
   // 도구가 「사용자에게 알릴 것」으로 표시한 경고는 모델 요약에 빠져도 마지막 요약에 붙인다
   const warn = st.result?.sibling ? `참고: 이 규정에는 해당 조문이 없어 새 조문을 만들었습니다. 같은 기관 「${st.result.sibling.title}」 ${st.result.sibling.ref}(${st.result.sibling.art_title})에 이미 같은 주제가 있으니, 그 규정을 고치는 것이 맞는지 확인하세요.` : '';
   if (warn && !String(finalSummary).includes(st.result.sibling.title)) finalSummary = [finalSummary, warn].filter(Boolean).join(' ');
