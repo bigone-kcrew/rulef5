@@ -8,6 +8,10 @@ import { lawVersions } from '../flows/lawversions.mjs';
 import { searchInstitutions } from '../flows/similar.mjs';
 import { lawFamily } from '../flows/lawchain.mjs';
 import { searchOrgs, orgsInfo } from './orgs.mjs';
+import { consolidatedDoc } from '../flows/docset.mjs';
+import { summarizeLogs } from './joblog.mjs';
+import { timingSafeEqual, createHash } from 'node:crypto';
+import { normalizeArticle } from './text.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +32,7 @@ export function parseLawOc(v) {
   if (!/^[A-Za-z0-9._@-]{2,60}$/.test(s)) throw httpError(400, '법제처 OC(인증키) 형식이 올바르지 않습니다. 영문·숫자만 넣어 주세요.');
   return s;
 }
-export function createRoutes({ sources: baseSources, jobs, workspace, env, flows, llmCounter = null, features = {} }) {
+export function createRoutes({ sources: baseSources, jobs, workspace, env, flows, llmCounter = null, features = {}, logDir = null }) {
   const srcFor = (req) => baseSources.withLawOc(parseLawOc(req.headers['x-law-oc']));
   const procedures = loadProcedures();
   const quota = createUploadQuota({ dailyBytes: (+env.UPLOAD_DAILY_MB || 300) * 1024 * 1024 });
@@ -39,10 +43,41 @@ export function createRoutes({ sources: baseSources, jobs, workspace, env, flows
     ['GET', '/api/status', (req, res) => {
       const sources = srcFor(req);
       let llm = null; try { const c = resolveLlmConfig(env, null); llm = c ? { preset: c.preset, model: c.model } : null; } catch { /* 무시 */ }
-      sendJson(res, 200, { data: sources.status(), llm, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, model: v.model, server_key: v.envKeys.some((e) => env[e]) }])), openrouter_models: allowedModels(env, 'openrouter'), models: { openrouter: allowedModels(env, 'openrouter'), nim: allowedModels(env, 'nim') }, features, active_jobs: jobs.active?.() ?? 0 });
+      sendJson(res, 200, { data: sources.status(), llm, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, model: v.model, server_key: v.envKeys.some((e) => env[e]) }])), openrouter_models: allowedModels(env, 'openrouter'), models: { openrouter: allowedModels(env, 'openrouter'), nim: allowedModels(env, 'nim') }, features: { ...features, hwpx: !!env.KORDOC_URL }, active_jobs: jobs.active?.() ?? 0 });
     }],
     ['GET', '/api/procedures', (req, res) => sendJson(res, 200, procedures)],
     ['GET', '/api/profiles', (req, res) => sendJson(res, 200, profiles)],
+    // 운영 요약(작업 기록): 서버에 RULEF5_ADMIN_TOKEN 이 있을 때만, Authorization: Bearer 로 확인. 없으면 경로 자체가 없다
+    ['GET', '/api/admin/report', (req, res) => {
+      const want = env.RULEF5_ADMIN_TOKEN;
+      if (!want || want.length < 16) throw httpError(404, '없는 경로입니다.');
+      const got = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      const h = (x) => createHash('sha256').update(String(x)).digest();
+      if (!got || !timingSafeEqual(h(got), h(want))) throw httpError(401, '관리 키가 맞지 않습니다.');
+      const days = Math.min(90, Math.max(1, +(new URL(req.url, 'http://x').searchParams.get('days')) || 7));
+      sendJson(res, 200, summarizeLogs(logDir || join(dirname(fileURLToPath(import.meta.url)), '..', 'var', 'logs'), days));
+    }],
+    // 한글(hwpx) 내려받기: 문서 변환 서비스(kordoc, KORDOC_URL)가 설정된 서버에서만. Markdown → hwpx
+    ['POST', '/api/hwpx', async (req, res) => {
+      if (!env.KORDOC_URL) throw httpError(404, '이 서버에서는 한글(hwpx) 내려받기를 쓸 수 없습니다.');
+      const b = await readJson(req, 1024 * 1024);
+      if (typeof b.markdown !== 'string' || !b.markdown.trim() || b.markdown.length > 800000) throw httpError(400, '문서 내용을 확인해 주세요.');
+      let r;
+      try { r = await fetch(`${String(env.KORDOC_URL).replace(/\/$/, '')}/v1/document/generate/hwpx`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ markdown: b.markdown }), signal: AbortSignal.timeout(120000) }); } catch { throw httpError(502, '한글 문서 변환 서비스에 연결하지 못했습니다.'); }
+      if (!r.ok) throw httpError(502, `한글 문서 변환에 실패했습니다(${r.status}).`);
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.subarray(0, 2).toString() !== 'PK') throw httpError(502, '한글 문서 변환 결과가 올바르지 않습니다.');
+      res.writeHead(200, { 'content-type': 'application/hwp+zip', 'content-length': buf.length, 'cache-control': 'no-store' }); res.end(buf);
+    }],
+    // 개정 후 전문 다시 만들기(모델 없이): 화면에서 고친 조문들을 원 규정 전체에 다시 반영한다
+    ['POST', '/api/fulltext', async (req, res) => {
+      const b = await readJson(req);
+      if (typeof b.doc_id !== 'string' || !b.doc_id || b.doc_id.length > 1500 || !Array.isArray(b.changes) || b.changes.length > 300) throw httpError(400, '규정과 변경 조문을 확인해 주세요.');
+      const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+      const changes = b.changes.filter((c) => c && ['amend', 'insert', 'delete'].includes(c.op)).map((c) => ({ op: c.op, ref: str(c.ref, 40), after: str(c.after, 40) || undefined, new_ref: str(c.new_ref, 40) || undefined, title: str(c.title, 100), new: str(c.new, 20000) }));
+      const doc = await srcFor(req).loadDoc(b.doc_id);
+      sendJson(res, 200, { body: consolidatedDoc({ doc, changes, addendaText: str(b.addenda, 5000), normalize: normalizeArticle }) });
+    }],
     ['POST', '/api/search', async (req, res) => {
       const sources = srcFor(req);
       const b = await readJson(req);

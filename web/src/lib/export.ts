@@ -21,3 +21,12 @@ export function toHtml(ds: DocSet) {
 export function toCsv(rows: Row[]) { const q = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s); return '﻿조문,현행,개정안\r\n' + rows.map((r) => [r.ref, plain(r.oldHtml), plain(r.newHtml)].map(q).join(',') + '\r\n').join('') }
 export function download(name: string, text: string, type: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: `${type};charset=utf-8` })); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 1000) }
 export function tableCsv(rows: Record<string, unknown>[], cols: [string, string][]) { const q = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s); return '﻿' + cols.map((c) => c[1]).join(',') + '\r\n' + rows.map((r) => cols.map(([k]) => q(String(r[k] ?? ''))).join(',') + '\r\n').join('') }
+// 한글(hwpx): 본문 줄을 문단으로 살린 Markdown 을 서버(문서 변환 서비스)로 보내 hwpx 로 받는다
+export function toMdHwpx(ds: DocSet) {
+  return [`# ${ds.title} (${ds.kind}안)`, `> ${NOTICE}`, ...ds.sections.flatMap((s) => [`## ${s.title}`, s.rows ? ['| 현행 | 개정안 |', '| --- | --- |', ...s.rows.map((r) => `| ${cleanHtml(r.oldHtml).replace(/\|/g, '\\|')} | ${cleanHtml(r.newHtml).replace(/\|/g, '\\|')} |`)].join('\n') : String(s.body || '').split('\n').filter((l) => l.trim()).join('\n\n')])].join('\n\n')
+}
+export async function downloadHwpx(name: string, ds: DocSet) {
+  const r = await fetch('/api/hwpx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ markdown: toMdHwpx(ds) }) })
+  if (!r.ok) { let m = `한글 변환 실패(${r.status})`; try { m = (await r.json()).error || m } catch { /* 무시 */ } throw new Error(m) }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+}

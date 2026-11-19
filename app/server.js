@@ -21,7 +21,7 @@ const sources = createSources(env, fetch, { cacheDir: join(varDir, 'cache') });
 const workspace = createWorkspace(join(varDir, 'work'));
 setInterval(() => workspace.sweep(24 * 3600e3), 3600e3).unref();
 const features = JSON.parse(readFileSync(join(here, 'public', 'features.json'), 'utf8'));
-const routes = createRoutes({ sources, jobs: createJobs({ maxConcurrent: +env.MAX_JOBS || 4, onEnd: createJobLog(join(varDir, 'logs')) }), workspace, env, flows: FLOWS, llmCounter: createDailyCounter(+env.SERVER_LLM_DAILY || 300), features });
+const routes = createRoutes({ sources, jobs: createJobs({ maxConcurrent: +env.MAX_JOBS || 4, onEnd: createJobLog(join(varDir, 'logs')) }), logDir: join(varDir, 'logs'), workspace, env, flows: FLOWS, llmCounter: createDailyCounter(+env.SERVER_LLM_DAILY || 300), features });
 
 // 예기치 않은 오류로 서버가 내려가지 않게 기록만 남긴다
 process.on('unhandledRejection', (e) => console.error('[unhandledRejection]', e?.code || e?.message || e));

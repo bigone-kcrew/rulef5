@@ -27,6 +27,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
   useEffect(() => { if (!sources.includes(tab as any)) setTab(sources[0]) }, [sources.join()]) // eslint-disable-line react-hooks/exhaustive-deps
   const [inst, setInst] = useState(profile.alio_inst || '')
   const [kw, setKw] = useState('')
+  const inst0 = inst, kw0 = kw, org0 = org
   const [lawq, setLawq] = useState('')
   const [targets, setTargets] = useState<string[]>(['law'])
   const [paste, setPaste] = useState('')
@@ -49,7 +50,8 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
     setLoading('doc'); setRefs([])
     try { const d = await api<Doc>('/api/doc?id=' + encodeURIComponent(id)); setDoc(d); onChange({ doc: d, uploads, refs: [] }) } catch (e) { setMsg({ ...msg, [tab]: (e as Error).message }) } finally { setLoading(null) }
   }
-  const searchAlio = async () => {
+  const searchAlio = async (i0?: string, k0?: string) => {
+    const inst = i0 ?? inst0, kw = k0 ?? kw0
     if (!kw.trim() && !inst.trim()) return setMsg({ ...msg, alio: '기관명이나 규정명을 입력하세요.' })
     setLoading('alio'); setMsg({ ...msg, alio: '' })
     try {
@@ -70,7 +72,8 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
       if (r.docs.length && !multi) { const d = await api<Doc>('/api/doc?id=' + encodeURIComponent(r.docs[0].doc_id)); setDoc(d); onChange({ doc: d, uploads: ids, refs: [] }) }
     } catch (e) { setMsg({ ...msg, upload: (e as Error).message }) } finally { setLoading(null) }
   }
-  const searchGov = async () => {
+  const searchGov = async (o0?: string, k0?: string) => {
+    const org = o0 ?? org0, kw = k0 ?? kw0
     if (!kw.trim() && !org.trim()) return setMsg({ ...msg, gov: '기관명이나 규정명을 입력하세요.' })
     setLoading('gov'); setMsg({ ...msg, gov: '' })
     try {
@@ -127,6 +130,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
             <Input className="min-w-40 flex-1" placeholder="규정명·주제(예: 취업규칙, 출산휴가)" value={kw} onChange={(e) => setKw(e.target.value)} maxLength={100} />
             <Button type="submit" disabled={loading === 'alio'}>{loading === 'alio' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
+          {!items.alio?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 실제 공시 규정으로 해 보세요:</span>{[['창업진흥원', '복무규정'], ['한국전력공사', '취업규칙'], ['소상공인시장진흥공단', '복무규정']].map(([i, k]) => <button key={i} type="button" className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setInst(i); setKw(k); searchAlio(i, k) }}>{i} · {k}</button>)}</div>}
           {list('alio')}
         </TabsContent>
         <TabsContent value="gov" className="pt-2">
@@ -136,6 +140,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
             <Button type="submit" disabled={loading === 'gov'}>{loading === 'gov' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
           <p className="mt-1 text-xs text-muted-foreground">법제처 국가법령정보의 현행 {govWord}를 제명으로 찾습니다. 기관명을 비우면 모든 기관에서 찾습니다.</p>
+          {!items.gov?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 이렇게 찾아 보세요:</span>{(profile.type === 'local-gov' ? [['경기도 수원시', '당직'], ['서울특별시', '복무']] : [['고용노동부', '당직'], ['행정안전부', '공무직']]).map(([o, k]) => <button key={o} type="button" className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setOrg(o); setKw(k); searchGov(o, k) }}>{o} · {k}</button>)}</div>}
           {list('gov')}
         </TabsContent>
         <TabsContent value="upload" className="flex flex-col gap-2 pt-2">

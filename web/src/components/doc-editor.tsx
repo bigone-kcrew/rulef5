@@ -2,7 +2,10 @@
 import { DownloadIcon, PrinterIcon, SheetIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { cleanHtml, download, toCsv, toHtml, toMd, type DocSet, type Section } from '@/lib/export'
+import { cleanHtml, download, downloadHwpx, toCsv, toHtml, toMd, type DocSet, type Section } from '@/lib/export'
+import { useApp } from '@/lib/app-state'
+import { useState } from 'react'
+import { Spinner } from '@/components/ui/spinner'
 
 export function DocEditor({ section, onChange }: { section: Section; onChange: (s: Section) => void }) {
   if (section.rows) {
@@ -24,8 +27,10 @@ export function DocEditor({ section, onChange }: { section: Section; onChange: (
 export function DocActions({ ds, name }: { ds: DocSet; name: string }) {
   const fname = (ext: string) => `${name}.${ext}`.replace(/[\\/:*?"<>|\s]+/g, '_')
   const rows = ds.sections.filter((s) => s.rows).flatMap((s) => s.rows!)
+  const { status } = useApp(); const [hw, setHw] = useState(false)
   return (
     <div className="flex flex-wrap gap-2">
+      {status?.features?.hwpx && <Button variant="outline" size="sm" disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), ds) } catch (e) { window.alert((e as Error).message) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
       <Button variant="outline" size="sm" onClick={() => download(fname('html'), toHtml(ds), 'text/html')}><DownloadIcon data-icon="inline-start" />문서(HTML·인쇄용)</Button>
       <Button variant="outline" size="sm" onClick={() => download(fname('md'), toMd(ds), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
       {rows.length > 0 && <Button variant="outline" size="sm" onClick={() => download(fname('csv'), toCsv(rows), 'text/csv')}><SheetIcon data-icon="inline-start" />대비표 CSV</Button>}

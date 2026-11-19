@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { JobTimeline } from '@/components/job-timeline'
 import { useJob } from '@/hooks/use-job'
 import { MessageSquareQuoteIcon } from 'lucide-react'
-import { download, toCsv, toHtml, toMd, type DocSet, type Section } from '@/lib/export'
+import { download, downloadHwpx, toCsv, toHtml, toMd, type DocSet, type Section } from '@/lib/export'
 
 const ICONS: Record<string, typeof FileTextIcon> = { draft: FileTextIcon, comparison: ColumnsIcon, comparison_other: ColumnsIcon, reason: ScrollTextIcon, addenda: StampIcon, notice: MegaphoneIcon, corrections: LinkIcon, checklist: ListChecksIcon, evidence: LibraryIcon }
 
@@ -26,7 +26,7 @@ export function Counter({ value, label }: { value: number; label: string }) {
 const preview = (s: Section) => s.rows ? s.rows.slice(0, 2).map((r) => r.newHtml.replace(/<[^>]+>/g, '').replace(/&(quot|amp|lt|gt|#39|nbsp);/g, (_, k: string) => ({ quot: '"', amp: '&', lt: '<', gt: '>', '#39': "'", nbsp: ' ' } as Record<string, string>)[k])).join(' / ') : (s.body || '').split('\n').filter(Boolean).slice(0, 3).join(' ')
 
 export function DocsetBoard({ result }: { result: any }) {
-  const { setDocKeys } = useApp()
+  const { setDocKeys, status } = useApp(); const [hw, setHw] = useState(false)
   const ds: DocSet = result.docset
   const [active, setActive] = useState(ds.sections[0]?.id)
   const editors = useRef<Record<string, HTMLElement | null>>({})
@@ -84,7 +84,8 @@ export function DocsetBoard({ result }: { result: any }) {
         </CardContent>
         {Array.isArray(result.changes) && result.changes.length > 0 && <CardContent><OpinionPanel result={result} /></CardContent>}
         <CardFooter className="flex flex-wrap gap-2">
-          <Button onClick={() => download(fname('md'), toMd(current()), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
+          {status?.features?.hwpx && <Button disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), current()) } catch (e) { window.alert((e as Error).message) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
+          <Button variant={status?.features?.hwpx ? 'outline' : 'default'} onClick={() => download(fname('md'), toMd(current()), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
           <Button variant="outline" onClick={() => download(fname('html'), toHtml(current()), 'text/html')}><DownloadIcon data-icon="inline-start" />문서(HTML·인쇄용)</Button>
           {ds.sections.some((s) => s.rows) && <Button variant="outline" onClick={() => download(fname('csv'), toCsv(current().sections.filter((s) => s.rows).flatMap((s) => s.rows!)), 'text/csv')}><SheetIcon data-icon="inline-start" />대비표 CSV</Button>}
           <Button variant="ghost" onClick={() => { const w = window.open('', '_blank'); if (!w) return; w.document.write(toHtml(current())); w.document.close(); w.focus(); w.print() }}><PrinterIcon data-icon="inline-start" />인쇄</Button>

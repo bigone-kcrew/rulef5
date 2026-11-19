@@ -18,7 +18,7 @@ import { AmendForm, type AmendPreset } from '@/views/amend'
 import { EnactForm } from '@/views/enact'
 import { useJob } from '@/hooks/use-job'
 import { useApp } from '@/lib/app-state'
-import { DOC_LABELS } from '@/lib/api'
+import { DOC_LABELS, api } from '@/lib/api'
 import type { DocSet, Section } from '@/lib/export'
 
 type Mode = 'amend' | 'enact'
@@ -101,6 +101,21 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
   const restart = () => { if (flow.result && !window.confirm('지금까지의 초안과 고친 내용을 지우고 새로 시작할까요?')) return; job.reset(); opinions.reset(); setOpText(''); setFlow(EMPTY); setFormKey((k) => k + 1) }
   const sec = (id: string) => flow.sections?.find((s) => s.id === id)
   const update = (s: Section) => setFlow((f) => ({ ...f, sections: (f.sections || []).map((x) => (x.id === s.id ? s : x)) }))
+  // 개정 후 전문 다시 만들기: 화면에서 고친 신구조문대비표(개정안 칸)를 조문 본문으로 되돌려 원 규정 전체에 다시 반영한다(모델 없이)
+  const [rebuilding, setRebuilding] = useState(false)
+  const rebuildFull = async () => {
+    const rows = sec('comparison')?.rows || [], cur = sec('full_text'); if (!cur || !flow.result?.doc?.doc_id) return
+    const txt = (h: string) => { const el = document.createElement('div'); el.innerHTML = String(h || '').replace(/<br\s*\/?>/gi, '\n'); return (el.textContent || '').trim() }
+    const head = /^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*/
+    const changes = (flow.result.changes || []).map((c: any) => {
+      if (c.op === 'delete') return c
+      const rs = rows.filter((r) => r.ref === c.ref); if (!rs.length) return c
+      const paras = rs.map((r) => { const n = txt(r.newHtml), o = txt(r.oldHtml); return n === '(현행과 같음)' ? o : /^<\s*삭\s*제\s*>$/.test(n) ? '' : n }).filter(Boolean)
+      return { ...c, new: paras.map((p, i) => (i === 0 ? p.replace(head, '') : p)).join('\n') }
+    })
+    setRebuilding(true)
+    try { const r = await api<{ body: string }>('/api/fulltext', { method: 'POST', body: { doc_id: flow.result.doc.doc_id, changes, addenda: sec('addenda')?.body || '' } }); update({ ...cur, body: r.body }) } catch (e) { window.alert(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
+  }
   const ds = (ids: string[]): DocSet => ({ kind: flow.result?.docset.kind || '', title: flow.result?.docset.title || '', evidence: flow.result?.docset.evidence || [], sections: ids.map(sec).filter(Boolean) as Section[] })
   const title = flow.result?.docset.title
   const run = (input: Record<string, unknown>) => { setFlow({ ...EMPTY, step: 'draft', done: ['prepare'] }); opinions.reset(); job.start(mode, input) }
@@ -164,6 +179,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                   <TabsList className="flex-wrap">{CORE.filter((id) => sec(id)).map((id) => <TabsTrigger key={id} value={id}>{sec(id)!.title}</TabsTrigger>)}</TabsList>
                   {CORE.filter((id) => sec(id)).map((id) => <TabsContent key={id} value={id} className="rounded-md border bg-background p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} /></TabsContent>)}
                 </Tabs>
+                {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표나 부칙을 고쳤다면</span><Button variant="outline" size="xs" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
                 <section className="flex flex-col gap-2">
                   <h3 className="flex items-center gap-2 font-semibold"><ListChecksIcon className="size-4" />확인할 점</h3>
                   {CHECKS.filter((id) => sec(id)).map((id, i) => (

@@ -47,5 +47,5 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 }
 export async function fileToB64(file: File) { const buf = new Uint8Array(await file.arrayBuffer()); let s = ''; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000)); return btoa(s) }
 export const TYPE_LABEL: Record<string, string> = { 'public-institution': '공공기관', 'central-ministry': '중앙행정기관', 'local-gov': '지방자치단체' }
-export const DOC_LABELS: Record<string, string> = { draft: '제·개정안', comparison: '신구조문대비표', reason: '이유서', addenda: '부칙', notice: '예고문', corrections: '인용 정정', checklist: '체크리스트', evidence: '근거 목록', consult_letter: '협조 공문', labor_opinion: '근로자 의견 청취서', legal_review: '법무 검토 의뢰서', council_agenda: '심의 안건', board_agenda: '이사회 부의안', assembly_bill: '의회 제출안', promulgation: '공포·발령문' }
+export const DOC_LABELS: Record<string, string> = { draft: '제·개정안', comparison: '신구조문대비표', full_text: '개정 후 전문', reason: '이유서', addenda: '부칙', notice: '예고문', corrections: '인용 정정', checklist: '체크리스트', evidence: '근거 목록', consult_letter: '협조 공문', labor_opinion: '근로자 의견 청취서', legal_review: '법무 검토 의뢰서', council_agenda: '심의 안건', board_agenda: '이사회 부의안', assembly_bill: '의회 제출안', promulgation: '공포·발령문' }
 export const EDITION: Record<string, string> = { current: '현행', superseded: '구판', scheduled: '시행예정', repealed: '폐지', unknown: '올린 자료' }

@@ -24,6 +24,10 @@ const CASES = [
   { id: 'A3', msg: '창업진흥원 복무규정에서 배우자 출산휴가를 출산예정일 50일 전부터 쓸 수 있게 해줘', inst: '창업진흥원', doc: /^복무규정$/, refs: ['제44조의2'], nums: ['50일'], topic: '배우자' },
   { id: 'A4', msg: '소상공인시장진흥공단 복무규정의 배우자 출산휴가를 20일로 늘려줘', inst: '소상공인시장진흥공단', doc: /복무규정/, nums: ['20일'], topic: '배우자' },
   { id: 'A5', msg: '창업진흥원 여비규정에서 국내출장 숙박비 상한을 올려야 해. 어떻게 고치면 될까', inst: '창업진흥원', doc: /여비/, topic: '숙박' },
+  { id: 'A6', msg: '한국전력공사 취업규칙의 배우자 출산휴가를 20일로 늘려줘', inst: '한국전력공사', doc: /취업규칙/, topic: '배우자' },
+  { id: 'G1', msg: '고용노동부 당직 및 비상근무규칙에서 당직 근무 다음 날 휴무를 보장하도록 고쳐줘', profile: { name: '고용노동부', type: 'central-ministry' }, doc: /당직/, topic: '휴무' },
+  { id: 'L1', msg: '수원시 공무원 당직 및 비상근무 규칙에서 당직 휴무일 지정 기한을 10일 이내로 줄여줘', profile: { name: '경기도 수원시', type: 'local-gov' }, doc: /당직/, nums: ['10일'], topic: '휴무' },
+  { id: 'L2', msg: '서울특별시 공무원 복무 조례에 배우자 출산휴가 규정이 법 개정에 맞는지 보고 고쳐줘', profile: { name: '서울특별시', type: 'local-gov' }, doc: /복무/, topic: '배우자' },
 ];
 const sel = only ? CASES.filter((c) => only.split(',').includes(c.id)) : CASES;
 const reps = Math.max(1, +repArg || 2);

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>운영 요약 — 규정 새로고침</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+body{font-family:Pretendard,"Malgun Gothic",system-ui,sans-serif;max-width:980px;margin:28px auto;padding:0 16px;color:#141824;word-break:keep-all;line-height:1.6}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.05rem;margin:22px 0 6px}
+.muted{color:#5b6475;font-size:.9rem}
+form{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+input,select,button{font:inherit;padding:6px 10px;border:1px solid #c9d0db;border-radius:6px}
+button{background:#1e4fae;color:#fff;border-color:#1e4fae;cursor:pointer}
+table{border-collapse:collapse;width:100%;font-size:.92rem}th,td{border:1px solid #d6dbe5;padding:6px 8px;text-align:left;vertical-align:top}th{background:#f1f4f9}
+.err{color:#b42318}.cards{display:flex;flex-wrap:wrap;gap:8px}.card{border:1px solid #d6dbe5;border-radius:8px;padding:8px 12px;min-width:120px}.card b{display:block;font-size:1.3rem}
+</style>
+</head>
+<body>
+<h1>운영 요약</h1>
+<p class="muted">서버 작업 기록(상태·소요 시간·지표만, 입력 내용·접속 주소 없음)을 모아 봅니다. 관리 키는 서버 설정(<code>RULEF5_ADMIN_TOKEN</code>)에 있으며, 이 탭에만 보관합니다.</p>
+<form id="f"><input id="k" type="password" placeholder="관리 키" autocomplete="off" size="34"><select id="d"><option value="1">최근 1일</option><option value="7" selected>최근 7일</option><option value="30">최근 30일</option></select><button>불러오기</button></form>
+<div id="out"></div>
+<script src="admin.js"></script>
+</body>
+</html>
