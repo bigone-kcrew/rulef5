@@ -1,0 +1,1 @@
+{ "id": "default-public-institution", "name": "예시 공공기관", "type": "public-institution", "alio_inst": "", "reg_kinds": ["정관", "규정", "규칙", "세칙", "지침"], "council": "규정심의위원회", "approver": "기관장", "effective_default": "이 규정은 발령한 날부터 시행한다.", "terms": { "직원": ["임직원", "종업원", "근로자", "사원"] } }

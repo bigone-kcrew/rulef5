@@ -1,0 +1,1 @@
+{ "id": "default-central-ministry", "name": "예시 중앙행정기관", "type": "central-ministry", "alio_inst": "", "reg_kinds": ["훈령", "예규", "고시", "지침"], "council": "", "approver": "장관", "effective_default": "이 훈령은 발령한 날부터 시행한다.", "terms": { "공무원": ["직원"] } }

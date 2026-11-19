@@ -1,0 +1,106 @@
+{
+  "type": "central-ministry",
+  "name": "중앙행정기관 행정규칙(훈령·예규·고시) 제·개정 절차",
+  "note": "일반적인 절차 안내입니다. 소관 부처의 훈령·예규 관리 규정과 법제처 안내를 확인하세요.",
+  "steps": [
+    {
+      "id": "draft",
+      "title": "제·개정 필요성 검토와 초안 작성",
+      "todo": [
+        "상위 법령의 위임 근거 확인",
+        "유사 행정규칙 조사",
+        "조문 초안·신구조문대비표·제·개정 이유서 작성"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "full_text",
+        "reason",
+        "addenda",
+        "evidence"
+      ],
+      "basis": "훈령·예규 등의 발령 및 관리에 관한 규정"
+    },
+    {
+      "id": "consult",
+      "title": "관계 부서·기관 협의",
+      "todo": [
+        "관계 부서·기관 의견 조회",
+        "의견 반영 결과 정리"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "consult_letter"
+      ],
+      "basis": "훈령·예규 등의 발령 및 관리에 관한 규정"
+    },
+    {
+      "id": "regulation",
+      "title": "규제 심사(규제 신설·강화 시)",
+      "todo": [
+        "규제 해당 여부 판단",
+        "규제영향분석서 작성·심사 요청"
+      ],
+      "docs": [
+        "reason"
+      ],
+      "basis": "행정규제기본법",
+      "optional": true
+    },
+    {
+      "id": "notice",
+      "title": "행정예고(국민 생활과 관계되는 경우)",
+      "todo": [
+        "행정예고문 작성·게시(원칙 20일 이상)",
+        "제출 의견 검토"
+      ],
+      "docs": [
+        "notice"
+      ],
+      "basis": "행정절차법 제46조(행정예고)",
+      "optional": true
+    },
+    {
+      "id": "legal",
+      "title": "법무 담당 부서 심사·법제처 사전검토(대상인 경우)",
+      "todo": [
+        "위임 범위·법령 저촉 여부 심사",
+        "인용 조문·용어 점검",
+        "법제처 사전검토 대상 여부 확인"
+      ],
+      "docs": [
+        "comparison",
+        "corrections",
+        "checklist",
+        "legal_review"
+      ],
+      "basis": "훈령·예규 등의 발령 및 관리에 관한 규정"
+    },
+    {
+      "id": "issue",
+      "title": "발령(결재)",
+      "todo": [
+        "발령 번호 부여·결재",
+        "시행일 확인"
+      ],
+      "docs": [
+        "draft",
+        "addenda",
+        "promulgation"
+      ],
+      "basis": "훈령·예규 등의 발령 및 관리에 관한 규정"
+    },
+    {
+      "id": "register",
+      "title": "법제처 법령정보 등록·게재",
+      "todo": [
+        "국가법령정보센터 게재 요청",
+        "게재 원문 대조"
+      ],
+      "docs": [],
+      "basis": "훈령·예규 등의 발령 및 관리에 관한 규정"
+    }
+  ]
+}

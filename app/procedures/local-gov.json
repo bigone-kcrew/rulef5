@@ -1,0 +1,115 @@
+{
+  "type": "local-gov",
+  "name": "지방자치단체 조례·규칙 제·개정 절차",
+  "note": "일반적인 절차 안내입니다. 해당 지방자치단체의 자치법규 입법 절차 조례·규칙과 현행 지방자치법 조문을 확인하세요.",
+  "steps": [
+    {
+      "id": "draft",
+      "title": "입안(필요성 검토와 초안 작성)",
+      "todo": [
+        "상위 법령의 위임 근거와 범위 확인",
+        "다른 지자체 유사 자치법규 조사",
+        "조문 초안·신구조문대비표·제·개정 이유서·비용추계(해당 시) 작성"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "full_text",
+        "reason",
+        "addenda",
+        "evidence"
+      ],
+      "basis": "지방자치법(조례·규칙) · 해당 지자체 자치법규 입법 절차 규정"
+    },
+    {
+      "id": "consult",
+      "title": "관계 부서 협의",
+      "todo": [
+        "관계 부서 의견 조회",
+        "의견 반영 결과 정리"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "consult_letter"
+      ],
+      "basis": "해당 지자체 자치법규 입법 절차 규정"
+    },
+    {
+      "id": "notice",
+      "title": "입법예고",
+      "todo": [
+        "입법예고문 작성·공고(자치법규는 원칙 20일 이상)",
+        "제출 의견 검토·반영"
+      ],
+      "docs": [
+        "notice"
+      ],
+      "basis": "행정절차법 제41조(입법예고)·제43조(예고기간)"
+    },
+    {
+      "id": "legal",
+      "title": "법무 담당 부서 심사",
+      "todo": [
+        "상위 법령 저촉·위임 범위 심사",
+        "인용 조문·용어 점검"
+      ],
+      "docs": [
+        "comparison",
+        "corrections",
+        "checklist",
+        "legal_review"
+      ],
+      "basis": "해당 지자체 자치법규 입법 절차 규정"
+    },
+    {
+      "id": "council",
+      "title": "조례·규칙심의회 심의",
+      "todo": [
+        "심의 안건 작성",
+        "심의 결과 반영"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "checklist",
+        "council_agenda"
+      ],
+      "basis": "지방자치법 시행령 · 해당 지자체 조례·규칙심의회 규칙"
+    },
+    {
+      "id": "assembly",
+      "title": "지방의회 제출·의결(조례인 경우)",
+      "todo": [
+        "의안 제출",
+        "상임위원회·본회의 의결",
+        "의결 결과 확인(규칙은 해당 없음)"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "assembly_bill"
+      ],
+      "basis": "지방자치법(지방의회의 의결사항)",
+      "optional": true
+    },
+    {
+      "id": "promulgate",
+      "title": "공포·보고",
+      "todo": [
+        "공포(이송 후 기한 확인)",
+        "공포 예정 사실 보고(시·도 → 행정안전부, 시·군·구 → 시·도)",
+        "자치법규정보시스템 등록"
+      ],
+      "docs": [
+        "draft",
+        "addenda",
+        "promulgation"
+      ],
+      "basis": "지방자치법(조례와 규칙의 제정 절차·보고)"
+    }
+  ]
+}

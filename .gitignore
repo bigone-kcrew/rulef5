@@ -1,0 +1,12 @@
+.env
+app/.env
+app/var/
+node_modules/
+.superpowers/
+.private/
+web/node_modules/
+/demo/
+
+# 웹 전용 페이지(저장소 제외)
+/web/public/submit/
+/app/public/submit/

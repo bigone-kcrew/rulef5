@@ -1,0 +1,9 @@
+{
+  "name": "rulef5",
+  "version": "1.0.0",
+  "private": true,
+  "description": "규정 새로고침(Rule F5) — 규정 제·개정 에이전트",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node app/server.js", "test": "node --test app/test/*.test.mjs" }
+}

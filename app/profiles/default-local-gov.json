@@ -1,0 +1,1 @@
+{ "id": "default-local-gov", "name": "예시 지방자치단체", "type": "local-gov", "alio_inst": "", "reg_kinds": ["조례", "규칙", "훈령", "예규"], "council": "조례·규칙심의회", "approver": "단체장", "effective_default": "이 조례는 공포한 날부터 시행한다.", "terms": { "공무원": ["직원"] } }

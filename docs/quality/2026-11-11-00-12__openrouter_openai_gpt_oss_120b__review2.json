@@ -1,0 +1,55 @@
+{
+ "spec": "openrouter:openai/gpt-oss-120b",
+ "llm_calls": 20,
+ "runs": [
+  {
+   "case": "Q2",
+   "status": "done",
+   "error": null,
+   "secs": 35.77,
+   "articles": 12,
+   "cited": [],
+   "nonexistent": [],
+   "delegate_upward": false,
+   "civil_servant_law": false,
+   "score": 1,
+   "checklist": [
+    "☐ 자체 검토로 고친 점(대조 확인) — 제7조: ① 제5조④에서 연간 30일, 월별 5일을 초과할 수 없다고 규정했음에도 제7조②에서 재택근무 일수 초과가 필요할 경우 사전 2일 이내에 변경 신청서를 제출하도록 하여 한도 초과를 허용하는 모순이 존재한다.",
+    "☐ 위임 근거 없이 작성했습니다. 기관 내부 사항인지, 상위 법령 위임이 필요한지 확인하세요.",
+    "☐ AI 확인 요청: 지침 내용이 현행 법령·내규와 충돌하지 않는지 검토"
+   ]
+  },
+  {
+   "case": "Q2",
+   "status": "done",
+   "error": null,
+   "secs": 25.243,
+   "articles": 12,
+   "cited": [],
+   "nonexistent": [],
+   "delegate_upward": false,
+   "civil_servant_law": false,
+   "score": 1,
+   "checklist": [
+    "☐ 제6조: 위임 범위 근거 필요 — 외부인 대상 의무·제한 조항입니다. 설립 근거법·관계 법령의 위임 또는 이용 약관·계약 등 근거를 확인하세요.",
+    "☐ 위임 근거 없이 작성했습니다. 기관 내부 사항인지, 상위 법령 위임이 필요한지 확인하세요."
+   ]
+  },
+  {
+   "case": "Q2",
+   "status": "done",
+   "error": null,
+   "secs": 14.131,
+   "articles": 10,
+   "cited": [],
+   "nonexistent": [],
+   "delegate_upward": false,
+   "civil_servant_law": false,
+   "score": 1,
+   "checklist": [
+    "☐ 위임 근거 없이 작성했습니다. 기관 내부 사항인지, 상위 법령 위임이 필요한지 확인하세요.",
+    "☐ AI 확인 요청: 보안·정보보호 기준이 현행 법령과 부합하는지 확인"
+   ]
+  }
+ ]
+}

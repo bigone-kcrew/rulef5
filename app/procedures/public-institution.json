@@ -1,0 +1,144 @@
+{
+  "type": "public-institution",
+  "name": "공공기관 내부규정 제·개정 절차",
+  "note": "일반적인 절차 안내입니다. 기관의 규정관리 규정(내규 관리 규정)과 정관에서 실제 단계·기한을 확인하세요.",
+  "steps": [
+    {
+      "id": "draft",
+      "title": "제·개정 필요성 검토와 초안 작성",
+      "todo": [
+        "제·개정 사유(상위법 개정, 감사 지적, 제도 개선 등) 정리",
+        "유사 기관 규정과 상위 법령 조사",
+        "조문 초안·신구조문대비표·제·개정 이유서 작성",
+        "다른 규정의 인용 조문 영향 확인"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "full_text",
+        "reason",
+        "addenda",
+        "evidence"
+      ],
+      "basis": "기관 규정관리 규정"
+    },
+    {
+      "id": "consult",
+      "title": "관계 부서 협의",
+      "todo": [
+        "관련 부서에 초안과 대비표 회람",
+        "의견 반영 여부 정리"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "consult_letter"
+      ],
+      "basis": "기관 규정관리 규정"
+    },
+    {
+      "id": "labor",
+      "title": "근로자 의견 청취·노동조합 협의(취업규칙 등 해당 시)",
+      "todo": [
+        "취업규칙에 해당하는지 확인",
+        "근로자 과반수 노동조합(없으면 근로자 과반수) 의견 청취",
+        "근로자에게 불리한 변경이면 동의 절차 진행",
+        "단체협약상 협의 사항인지 확인"
+      ],
+      "docs": [
+        "comparison",
+        "reason",
+        "labor_opinion"
+      ],
+      "basis": "근로기준법 제94조(규칙의 작성, 변경 절차) · 단체협약",
+      "optional": true
+    },
+    {
+      "id": "notice",
+      "title": "사전 예고·의견 수렴(기관 규정에 정한 경우)",
+      "todo": [
+        "예고문 게시(기간은 기관 규정 확인)",
+        "제출 의견 검토"
+      ],
+      "docs": [
+        "notice"
+      ],
+      "basis": "기관 규정관리 규정",
+      "optional": true
+    },
+    {
+      "id": "legal",
+      "title": "법무·감사 부서 검토",
+      "todo": [
+        "상위 법령 위임 범위·저촉 여부 검토",
+        "인용 조문·용어 정합성 점검",
+        "검토 의견 반영"
+      ],
+      "docs": [
+        "comparison",
+        "corrections",
+        "checklist",
+        "legal_review"
+      ],
+      "basis": "기관 규정관리 규정"
+    },
+    {
+      "id": "council",
+      "title": "규정심의위원회 심의",
+      "todo": [
+        "심의 안건 작성(제·개정안, 대비표, 이유서)",
+        "심의 결과 반영"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "checklist",
+        "council_agenda"
+      ],
+      "basis": "기관 규정관리 규정"
+    },
+    {
+      "id": "board",
+      "title": "이사회 의결(이사회 의결 사항인 경우)",
+      "todo": [
+        "정관·이사회 규정에서 의결 대상인지 확인",
+        "이사회 안건 상정"
+      ],
+      "docs": [
+        "draft",
+        "comparison",
+        "reason",
+        "board_agenda"
+      ],
+      "basis": "공공기관의 운영에 관한 법률 제17조(이사회의 심의·의결 사항) · 기관 정관",
+      "optional": true
+    },
+    {
+      "id": "promulgate",
+      "title": "공포(시행)·전 직원 안내",
+      "todo": [
+        "기관장 결재 후 공포",
+        "시행일·경과조치 안내",
+        "관련 서식·시스템 반영"
+      ],
+      "docs": [
+        "draft",
+        "addenda",
+        "promulgation"
+      ],
+      "basis": "기관 규정관리 규정"
+    },
+    {
+      "id": "disclose",
+      "title": "ALIO 내부규정 공시",
+      "todo": [
+        "개정 규정 원문 공시(통합공시 기준 기한 확인)",
+        "공시 후 원문 대조"
+      ],
+      "docs": [],
+      "basis": "공공기관의 운영에 관한 법률 제11조(경영공시) · 공공기관 통합공시 기준"
+    }
+  ]
+}
