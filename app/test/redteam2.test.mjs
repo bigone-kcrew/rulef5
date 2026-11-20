@@ -185,3 +185,46 @@ test('amending an article whose title has nothing to do with the request warns w
   assert.equal(j.status, 'done', JSON.stringify(j.error));
   assert.match(j.result.docset.sections.find((s) => s.id === 'checklist').body, /제15조\(긴급사태 시 임무\): 요청 주제와 제목이 맞는 조문\(제5조 당직자의 휴무\)/);
 });
+test('one confirmation screen for articles and evidence; the draft written while waiting is reused when the recommendation is accepted', async () => {
+  const D = parseRegulationText('라 규정\n제5조(휴가) 직원에게 10일의 휴가를 준다.\n제6조(병가) 직원에게 휴가와 별도로 병가를 준다.', { doc_id: 'upload:cccccccccccccccc/0', title: '라 규정' });
+  const src = { ...sources, loadDoc: async () => D, searchRegs: async () => ({ rows: ['마', '바', '사', '아'].map((x, i) => ({ doc_id: `bylaws:${x}`, inst_name: `${x}공단`, doc_title: '복무규정', art_ref: `제${i + 3}조`, body: '직원에게 20일의 휴가를 준다.' })) }) };
+  const calls = { draft: 0 };
+  const reply = (o) => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify(o) }, finish_reason: 'stop' }] }) });
+  const llm = createLlm({ preset: 'custom', baseUrl: 'https://m.example/v1', apiKey: 'k', model: 'm', extra: {}, source: 'user' }, { fetchImpl: async (u, init) => {
+    const b = String(init.body);
+    if (b.includes('후보조문')) return reply({ refs: ['제5조'], why: '휴가', topic: '휴가', exists: true });
+    if (b.includes('수정안을 작성')) { calls.draft++; const t = JSON.parse(JSON.parse(b).messages[1].content).대상조문.map((x) => x.ref); const ref = t.includes('제6조') && !t.includes('제5조') ? '제6조' : '제5조'; return reply({ changes: [{ op: 'amend', ref, new_text: '직원에게 20일의 휴가를 준다.', basis_ids: [] }], reason_summary: 's', main_points: [], addenda: {}, checks: [] }); }
+    return reply({ issues: [] });
+  } });
+  const run = async (answer) => {
+    const jobs = createJobs(); const id = jobs.start('amend', { doc_id: D.doc_id, intent: '휴가를 20일로 늘린다' }, runAmend, { deps: { sources: src, llm } });
+    for (let i = 0; i < 400; i++) { const j = jobs.get(id); if (j.status === 'waiting') { assert.equal(j.gate.id, 'pick_targets'); assert.ok(j.gate.options.some((o) => o.group?.startsWith('개정할 조문')) && j.gate.options.some((o) => o.group?.startsWith('참고할 근거'))); await new Promise((r) => setTimeout(r, 30)); jobs.answer(id, 'pick_targets', answer(j.gate.options)); break; } await new Promise((r) => setTimeout(r, 5)); }
+    return until(jobs, id);
+  };
+  calls.draft = 0;
+  let j = await run((o) => o.filter((x) => x.checked).map((x) => x.value));
+  assert.equal(j.status, 'done', JSON.stringify(j.error)); assert.equal(calls.draft, 1); assert.match(j.steps.find((s) => s.name === '수정안 작성').note, /미리 작성한 초안/);
+  calls.draft = 0;
+  j = await run((o) => o.filter((x) => x.value === 'A:제6조' || x.value.startsWith('E:')).map((x) => x.value));
+  assert.equal(j.status, 'done', JSON.stringify(j.error)); assert.equal(calls.draft, 2); assert.deepEqual(j.result.changes.map((c) => c.ref), ['제6조']);
+  assert.ok(j.steps.some((s) => s.name === '근거 다시 조사'));
+});
+test('when the target article is unmistakable and evidence is small, the confirmation is skipped and noted in the checklist', async () => {
+  const D = parseRegulationText('라 규정\n제5조(휴가) 직원에게 10일의 휴가를 준다.\n제6조(병가) 직원에게 병가를 준다.', { doc_id: 'upload:bbbbbbbbbbbbbbbb/0', title: '라 규정' });
+  const src = { ...sources, loadDoc: async () => D };
+  const pickR = { refs: ['제5조'], why: '휴가', topic: '휴가', exists: true };
+  const draft = { changes: [{ op: 'amend', ref: '제5조', new_text: '직원에게 20일의 휴가를 준다.', basis_ids: [] }], reason_summary: 's', main_points: [], addenda: {}, checks: [] };
+  const jobs = createJobs();
+  const j = await until(jobs, jobs.start('amend', { doc_id: D.doc_id, intent: '휴가를 20일로 늘린다' }, runAmend, { deps: { sources: src, llm: llmOf(pickR, draft, { issues: [] }) } }));
+  assert.equal(j.status, 'done', JSON.stringify(j.error));
+  assert.match(j.result.docset.sections.find((x) => x.id === 'checklist').body, /제5조\)이 분명해 확인 없이 진행/);
+});
+test('an AI-recommended article outside the keyword candidates is still shown and pre-checked on the confirmation screen', async () => {
+  const D = parseRegulationText('사 규정\n제5조(휴가) 직원에게 10일의 휴가를 준다.\n제9조(경조사) 경조사가 있으면 별도로 정한다.', { doc_id: 'upload:aaaaaaaaaaaaaaab/0', title: '사 규정' });
+  const src = { ...sources, loadDoc: async () => D, searchRegs: async () => ({ rows: ['마', '바', '사', '아'].map((x, i) => ({ doc_id: `bylaws:${x}`, inst_name: `${x}공단`, doc_title: '복무규정', art_ref: `제${i + 3}조`, body: '경조사 휴가를 준다.' })) }) };
+  const llm = llmOf({ refs: ['제9조'], why: '경조사', topic: '배우자 출산', exists: true }, { changes: [{ op: 'amend', ref: '제9조', new_text: '경조사 휴가는 20일로 한다.', basis_ids: [] }], reason_summary: 's', main_points: [], addenda: {}, checks: [] }, { issues: [] });
+  const jobs = createJobs(); const id = jobs.start('amend', { doc_id: D.doc_id, intent: '휴가를 20일로 늘린다' }, runAmend, { deps: { sources: src, llm } });
+  for (let i = 0; i < 400; i++) { const j = jobs.get(id); if (j.status === 'waiting') { const o = j.gate.options.find((x) => x.value === 'A:제9조'); assert.ok(o && o.checked); jobs.answer(id, j.gate.id, j.gate.options.filter((x) => x.checked).map((x) => x.value)); break; } await new Promise((r) => setTimeout(r, 5)); }
+  const j = await until(jobs, id);
+  assert.equal(j.status, 'done', JSON.stringify(j.error)); assert.deepEqual(j.result.changes.map((c) => c.ref), ['제9조']);
+});

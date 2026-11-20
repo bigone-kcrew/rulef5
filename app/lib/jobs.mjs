@@ -31,7 +31,7 @@ export function createJobs({ maxConcurrent = 4, ttlMs = 3600e3, gateTimeoutMs = 
       // 개선용 지표(개수·참거짓·짧은 코드만)
       metric(k, v) { job.metrics[k] = v; },
       gate(g) {
-        job.gates.push({ id: String(g.id).replace(/_\d{6,}$/, ''), at: Date.now(), waited: null });
+        job.gates.push({ id: String(g.id).replace(/_\d{6,}$/, ''), at: Date.now(), waited: null, defaults: (g.options || []).filter((o) => o.checked).map((o) => String(o.value)).sort(), changed: null });
         job.status = 'waiting'; job.gate = { id: g.id, prompt: g.prompt, options: g.options || null, multi: !!g.multi, schema: g.schema || null, data: g.data || null }; touch();
         return new Promise((resolve, reject) => {
           const timer = setTimeout(() => { if (job.waiter?.id === g.id) { job.waiter = null; reject(Object.assign(new Error('확인을 기다리다 시간이 지났습니다(30분). 다시 실행해 주세요.'), { code: 'gate_timeout', status: 408 })); } }, gateTimeoutMs);
@@ -54,7 +54,7 @@ export function createJobs({ maxConcurrent = 4, ttlMs = 3600e3, gateTimeoutMs = 
     const end = () => {
       if (ended) return; ended = true; clearInterval(watch);
       job.gate = null; job.waiter = null; touch();
-      if (onEnd) { try { const m = extras.deps?.llm?.config; onEnd({ t: new Date(job.created).toISOString(), id: job.id.slice(0, 6), type, status: job.status, ms: Date.now() - job.created, model: m ? `${m.preset}:${m.model}${m.source === 'user' ? '(user)' : ''}` : null, error: job.error ? { code: job.error.code, message: String(job.error.message).slice(0, 200) } : null, failed_step: job.steps.find((s) => s.state === 'failed')?.name || null, steps: job.steps.map((s) => [s.name, s.state, s.ms ?? null]), gates: job.gates.map((g) => [g.id, g.waited]), metrics: job.metrics }); } catch { /* 기록 실패는 무시 */ } }
+      if (onEnd) { try { const m = extras.deps?.llm?.config; onEnd({ t: new Date(job.created).toISOString(), id: job.id.slice(0, 6), type, status: job.status, ms: Date.now() - job.created, model: m ? `${m.preset}:${m.model}${m.source === 'user' ? '(user)' : ''}` : null, error: job.error ? { code: job.error.code, message: String(job.error.message).slice(0, 200) } : null, failed_step: job.steps.find((s) => s.state === 'failed')?.name || null, steps: job.steps.map((s) => [s.name, s.state, s.ms ?? null]), gates: job.gates.map((g) => [g.id, g.waited, g.changed]), metrics: job.metrics }); } catch { /* 기록 실패는 무시 */ } }
     };
     Promise.resolve().then(() => runner(ctx)).then((r) => { if (over) return; job.result = r ?? null; job.status = 'done'; }, (e) => {
       if (over) return;
@@ -73,7 +73,7 @@ export function createJobs({ maxConcurrent = 4, ttlMs = 3600e3, gateTimeoutMs = 
     const j = jobs.get(id);
     if (!j || !j.waiter || j.waiter.id !== gateId) return false;
     const w = j.waiter; j.waiter = null; j.gate = null; j.status = 'running'; j.updated = Date.now();
-    const g = j.gates.at(-1); if (g && g.waited == null) g.waited = Date.now() - g.at;
+    const g = j.gates.at(-1); if (g && g.waited == null) { g.waited = Date.now() - g.at; const got = [].concat(value ?? []).map(String).sort(); g.changed = JSON.stringify(got) !== JSON.stringify(g.defaults || []); }
     w.resolve(value); return true;
   }
   // 진행 중(실행·확인 대기) 작업 수 — 서버를 다시 띄우기 전에 확인한다(작업은 메모리에만 있다)

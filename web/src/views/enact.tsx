@@ -1,4 +1,5 @@
 // 제정 준비 단계 입력: 종류·제명·목적 + 상위법 위임 조항 (고급 옵션: 함께 정비할 기존 규정)
+import { FastToggle, useFast } from '@/components/fast-toggle'
 import { useState } from 'react'
 import { motion } from 'motion/react'
 import { PlusIcon, CornerDownLeftIcon, XIcon } from 'lucide-react'
@@ -16,6 +17,7 @@ import { useApp } from '@/lib/app-state'
 
 const KINDS: Record<string, string[]> = { 'public-institution': ['규정', '규칙', '세칙', '지침'], 'central-ministry': ['훈령', '예규', '고시', '지침'], 'local-gov': ['조례', '규칙', '훈령', '지침'] }
 export function EnactForm({ busy, onRun }: { busy: boolean; onRun: (input: Record<string, unknown>) => void }) {
+  const [fast, setFast] = useFast()
   const { profile } = useApp()
   const kinds = KINDS[profile.type] || KINDS['public-institution']
   const [kind, setKind] = useState(kinds[kinds.length - 1])
@@ -59,8 +61,9 @@ export function EnactForm({ busy, onRun }: { busy: boolean; onRun: (input: Recor
         </Collapsible>
       </section>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+        <FastToggle fast={fast} setFast={setFast} />
         {(!title.trim() || !purpose.trim()) && <span className="text-sm text-muted-foreground">제명과 제정 목적을 적으세요</span>}
-        <Button size="lg" disabled={!title.trim() || !purpose.trim() || busy} onClick={() => onRun({ kind, title: title.trim(), purpose: purpose.trim(), delegations: dels.map(({ label, ...d }) => (d.text ? { text: d.text, label } : d)), related_doc_ids: related?.uploads || [] })}>
+        <Button size="lg" disabled={!title.trim() || !purpose.trim() || busy} onClick={() => onRun({ kind, title: title.trim(), purpose: purpose.trim(), delegations: dels.map(({ label, ...d }) => (d.text ? { text: d.text, label } : d)), related_doc_ids: related?.uploads || [], auto: fast || undefined })}>
           {busy ? <Spinner data-icon="inline-start" /> : <CornerDownLeftIcon data-icon="inline-start" />}초안 만들기
         </Button>
       </div>

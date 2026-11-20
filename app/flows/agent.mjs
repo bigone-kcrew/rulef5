@@ -29,7 +29,7 @@ const heuristicParams = (msg, profile) => ({ inst: profile?.alio_inst || '', reg
 const planPrompt = (input, tools) => [
   { role: 'system', content: SYS_BASE },
   { role: 'user', content: JSON.stringify({
-    과제: '규정 제·개정 업무 요청을 이해하고, 아래 도구만으로 실행 계획을 세운다. 개정이면 규정을 찾아 불러온 뒤 draft_amendment, 제정이면 관련 법령을 찾고 draft_enactment 를 쓴다. 상위법 확인·유사 규정 조사·절차 안내를 필요한 만큼 넣고 finish 로 끝낸다. 12단계 이내. 사용자의 기관 정보가 없고 대상 규정을 특정할 수 없으면 ask_user 로 묻는다.',
+    과제: '규정 제·개정 업무 요청을 이해하고, 아래 도구만으로 실행 계획을 세운다. 개정이면 규정을 찾아 불러온 뒤 draft_amendment, 제정이면 관련 법령을 찾고 draft_enactment 를 쓴다. 상위법 확인·유사 규정 조사·절차 안내를 필요한 만큼 넣고 finish 로 끝낸다. 12단계 이내. 사용자의 기관 정보가 없고 대상 규정을 특정할 수 없으면 ask_user 로 묻되, 질문은 계획 맨 앞에서 한 번만 한다(규정을 불러온 뒤에는 묻지 않는다).',
     사용자요청: input.message, 이전대화: (input.history || []).slice(-6), 기관프로필: { 이름: input.profile?.name, 유형: input.profile?.type, ALIO기관명: input.profile?.alio_inst || null },
     이미선택된규정: input.doc_id || null,
     도구: Object.entries(tools).map(([name, t]) => ({ name, 설명: t.desc, 인자: t.args })),

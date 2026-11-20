@@ -109,11 +109,11 @@ export async function runAmend(ctx) {
   let absentTopic = null;
   // 규정에 그 주제 조문이 있는지(코드 판단): 조 제목에 주제 낱말이 있거나, 한 조문 본문에 주제 낱말이 모두 있으면 있는 것으로 본다
   const hasTopic = (topic) => { const ws = topic.split(/\s+/).filter((w) => w.length >= 2); if (!ws.length) return true; return doc.articles.some((a) => ws.some((w) => String(a.title || '').includes(w)) || ws.every((w) => String(a.body || '').includes(w))); };
-  const refs = await ctx.step('대상 조문 찾기', async (s) => {
+  const pick = await ctx.step('대상 조문 찾기', async (s) => {
     if (Array.isArray(input.refs) && input.refs.length) {
       const bad = input.refs.filter((r) => !byRef.has(r));
       if (bad.length) throw fail('unknown_ref', `${bad.join(', ')} 조문을 찾지 못했습니다.`);
-      s.note(`지정 조문: ${input.refs.join(', ')}`); return input.refs.slice(0, 5);
+      s.note(`지정 조문: ${input.refs.join(', ')}`); return { suggested: input.refs.slice(0, 5), pool: [], why: '지정', fixed: true };
     }
     const kws = keywords(intent);
     const ranked = main.map((a) => [scoreArticle(a, kws), a]).sort((x, y) => y[0] - x[0]);
@@ -132,30 +132,24 @@ export async function runAmend(ctx) {
       } catch (e) { ctx.log(`AI 조문 추천 실패(${e.code || 'error'}) — 핵심어 일치 결과를 씁니다.`); ctx.metric?.('picker_fallback', e.code || 'error'); }
     }
     s.note(`추천: ${suggested.join(', ') || '없음'} (${why})`);
-    if (input.auto && suggested.length) return suggested;
-    const picked = await ctx.gate({ id: 'pick_articles', prompt: absentTopic ? `이 규정에는 「${absentTopic}」 조문이 없습니다. 새 조문을 둘 자리(바로 앞 조문)를 확인해 주세요.` : why === '핵심어 일치' ? 'AI 추천을 받지 못해 낱말이 맞는 조문을 보여 드립니다. 개정할 조문을 골라 주세요.' : '개정할 조문을 확인해 주세요(여러 개 선택 가능).', multi: true, options: pool.map((a) => ({ doc_id: doc.doc_id, ref: a.ref, value: a.ref, label: `${a.ref}(${a.title})`, detail: clip(a.body, 160), checked: why !== '핵심어 일치' && suggested.includes(a.ref) })) }); // AI 추천이 없으면 낱말만 맞은 조문을 미리 고르지 않는다
-    const arr = [].concat(picked || []).filter((r) => byRef.has(r)).slice(0, 5);
-    if (!arr.length) throw fail('no_target', '개정할 조문이 선택되지 않았습니다.');
-    return arr;
+    return { suggested, pool, why, fixed: false };
   });
-  const targets = refs.map((r) => byRef.get(r));
-
-  const { evidence, errors } = await ctx.step('근거 조사', async (s) => {
-    const q = `${intent} ${targets.map((a) => a.title).join(' ')}`;
-    // 올린 파일이라도 기관 유형이 지자체·부처면 유사 규정은 법제처 자치법규·행정규칙에서 찾는다
+  // 근거 조사: 고른 조문 제목과 의도로 유사 규정·상위 법령을 찾는다
     const govT = (doc.doc_id.match(/^law:(ordin|admrul):/) || [])[1] || { 'local-gov': 'ordin', 'central-ministry': 'admrul' }[input.profile?.type] || null;
     const orgType = govT ? (govT === 'ordin' ? 'local-gov' : 'central-ministry') : (input.profile?.type || null);
-    const r = await gatherEvidence(ctx.deps, { query: q, excludeDocId: doc.doc_id, excludeSame: doc.inst ? { inst: doc.inst, title: doc.title } : null, orgType, govSimilar: govT && sources.gov?.enabled ? { target: govT, org: doc.inst || input.profile?.name || null } : null });
+  const collect = async (refsX) => { const targets = refsX.map((r) => byRef.get(r)).filter(Boolean); const q = `${intent} ${targets.map((a) => a.title).join(' ')}`; return gatherEvidence(ctx.deps, { query: q, excludeDocId: doc.doc_id, excludeSame: doc.inst ? { inst: doc.inst, title: doc.title } : null, orgType, govSimilar: govT && sources.gov?.enabled ? { target: govT, org: doc.inst || input.profile?.name || null } : null }); };
+  // 확인 화면 전에 정할 조문: 추천(없으면 낱말이 가장 맞는 후보로 근거만 찾는다)
+  let refs = pick.suggested.length ? pick.suggested : pick.pool.slice(0, 1).map((a) => a.ref);
+  if (!refs.length) throw fail('no_target', '개정할 조문을 찾지 못했습니다.');
+  let { evidence, errors } = await ctx.step('근거 조사', async (s) => {
+    const r = await collect(refs);
     s.note(`근거 ${r.evidence.length}건${r.errors.length ? ` · ⚠ ${r.errors.join('·')} 조회 실패(0건이 '없음'을 뜻하지 않음)` : ''}`);
     s.evidence(r.evidence.map((e) => ({ label: `[${e.id}] ${e.kind} · ${e.label}`, doc_id: e.doc_id, ref: e.ref, edition: e.edition })));
-    if (input.auto || !r.evidence.length) return r;
-    const keep = await ctx.gate({ id: 'pick_evidence', prompt: '수정안에 참고할 근거를 확인해 주세요. 우리 기관에 맞지 않는 사례는 빼세요.', multi: true, options: r.evidence.map((e) => ({ doc_id: e.doc_id, ref: e.ref, value: e.id, label: `[${e.id}] ${e.kind} · ${e.label}`, detail: clip(e.text, 200), checked: true })) });
-    const set = new Set([].concat(keep || []));
-    return { evidence: r.evidence.filter((e) => set.has(e.id)), errors: r.errors };
+    return r;
   });
 
-  const draft = await ctx.step('수정안 작성', async (s) => {
-    if (!llm) throw fail('llm_missing', '모델이 설정되지 않아 수정안을 만들 수 없습니다. 상단 「모델 설정」에서 모델과 API 키를 지정하세요.');
+  // 수정안 작성(모델): 확인 화면을 보는 동안 추천대로 미리 쓸 수 있게 함수로 둔다(단계 기록은 하지 않음)
+  const makeDraft = async (targets, evidence) => {
     const ids = new Set(evidence.map((e) => e.id));
     let attempt = 0; const dropped = [], dupTitle = new Set(), titleClash = [];
     const validate = (o) => {
@@ -206,11 +200,53 @@ export async function runAmend(ctx) {
       dropped.push(...bad); o.changes = good;
       return o;
     };
-    const t0 = Date.now();
     const o = await llm.chatJson(amendPrompt({ doc, intent, targets, evidence, toc: main.slice(0, 400).map((a) => `${a.ref} ${a.title}`), profile: input.profile, absent: absentTopic, subject: subjectOf(main.map((a) => a.body).join('\n')) }), validate);
     o.changes = mergeParagraphChanges(o.changes, (ref) => byRef.get(ref).body);
     o.dropped = dropped; o.dupTitle = [...dupTitle].filter((r) => o.changes.some((c) => c.ref === r)); o.titleClash = [...new Set(titleClash)];
-    s.note(`변경 ${o.changes.length}건 · ${llm.config.model} · ${((Date.now() - t0) / 1000).toFixed(1)}초`);
+    return o;
+  };
+
+  // 담당자 확인 — 조문과 근거를 한 화면에서 고른다. 그동안 추천대로 수정안을 미리 쓰고, 추천을 그대로 받으면 그 결과를 바로 쓴다
+  let reuse = null, gateSkipped = null;
+  if (!input.auto) {
+    const kwT = keywords(intent).filter((w) => w.length >= 2);
+    const titledT = main.filter((a) => kwT.some((w) => String(a.title || '').includes(w)));
+    // 대상이 분명하면(추천 1개 = 제목이 주제와 맞는 유일한 조문, 근거 3건 이하) 묻지 않고 진행한다
+    const clear = !pick.fixed && pick.why !== '핵심어 일치' && !absentTopic && refs.length === 1 && titledT.length === 1 && titledT[0].ref === refs[0] && evidence.length <= 3 && !errors.length;
+    const opts = [
+      // 추천 조문이 낱말 후보 목록 밖에 있어도 반드시 보여 준다(추천을 앞에)
+      ...(pick.fixed ? [] : [...new Map([...refs.map((r) => byRef.get(r)).filter(Boolean), ...pick.pool].map((a) => [a.ref, a])).values()].map((a) => ({ group: '개정할 조문', doc_id: doc.doc_id, ref: a.ref, value: `A:${a.ref}`, label: `${a.ref}(${a.title})`, detail: clip(a.body, 160), checked: pick.why !== '핵심어 일치' && refs.includes(a.ref) }))),
+      ...evidence.map((e) => ({ group: '참고할 근거 — 우리 기관에 맞지 않는 사례는 빼세요', doc_id: e.doc_id, ref: e.ref, value: `E:${e.id}`, label: `[${e.id}] ${e.kind} · ${e.label}`, detail: clip(e.text, 160), checked: true })),
+    ];
+    if (clear) { gateSkipped = `대상 조문(${refs[0]})이 분명해 확인 없이 진행했습니다. 다른 조문이었다면 「입력 고치기」에서 조문을 지정해 다시 만드세요.`; ctx.log(`· ${gateSkipped}`); }
+    else if (opts.length) {
+      const preset = pick.why !== '핵심어 일치';
+      const spec = llm && preset ? makeDraft(refs.map((r) => byRef.get(r)), evidence).catch(() => null) : null;
+      const prompt = absentTopic ? `이 규정에는 「${absentTopic}」 조문이 없습니다. 새 조문을 둘 자리(바로 앞 조문)와 참고할 근거를 확인해 주세요.` : !preset ? 'AI 추천을 받지 못해 낱말이 맞는 조문을 보여 드립니다. 개정할 조문과 참고할 근거를 골라 주세요.' : '개정할 조문과 참고할 근거를 확인해 주세요. 추천대로면 바로 확인을 누르세요(그동안 초안을 미리 쓰고 있습니다).';
+      const picked = [].concat(await ctx.gate({ id: 'pick_targets', prompt, multi: true, options: opts }) || []).map(String);
+      const newRefs = pick.fixed ? refs : picked.filter((v) => v.startsWith('A:')).map((v) => v.slice(2)).filter((r) => byRef.has(r)).slice(0, 5);
+      if (!newRefs.length) throw fail('no_target', '개정할 조문이 선택되지 않았습니다.');
+      const evIds = new Set(picked.filter((v) => v.startsWith('E:')).map((v) => v.slice(2)));
+      const sameRefs = newRefs.length === refs.length && newRefs.every((r) => refs.includes(r));
+      if (!sameRefs) {
+        refs = newRefs;
+        const r = await ctx.step('근거 다시 조사', async (s) => { const x = await collect(refs); s.note(`고른 조문으로 근거 ${x.evidence.length}건`); s.evidence(x.evidence.map((e) => ({ label: `[${e.id}] ${e.kind} · ${e.label}`, doc_id: e.doc_id, ref: e.ref, edition: e.edition }))); return x; });
+        evidence = r.evidence; errors = r.errors;
+      } else {
+        const all = evidence.length; evidence = evidence.filter((e) => evIds.has(e.id));
+        if (preset && evidence.length === all) reuse = spec;
+      }
+    }
+  }
+  const targets = refs.map((r) => byRef.get(r));
+
+  const draft = await ctx.step('수정안 작성', async (s) => {
+    if (!llm) throw fail('llm_missing', '모델이 설정되지 않아 수정안을 만들 수 없습니다. 상단 「모델 설정」에서 모델과 API 키를 지정하세요.');
+    const t0 = Date.now();
+    let o = reuse ? await reuse : null; const reused = !!o;
+    if (!o) o = await makeDraft(targets, evidence);
+    s.note(`변경 ${o.changes.length}건 · ${llm.config.model} · ${((Date.now() - t0) / 1000).toFixed(1)}초${reused ? ' · 확인하는 동안 미리 작성한 초안' : ''}`);
+    try { ctx.metric?.('gate', { reused, skipped: !!gateSkipped }); } catch { /* 지표는 작업을 막지 않는다 */ }
     return o;
   });
 
@@ -293,6 +329,7 @@ export async function runAmend(ctx) {
     const titled = main.filter((a) => topicWords.some((w) => String(a.title || '').includes(w)));
     const offTopic = absentTopic ? [] : changes.filter((c) => c.op === 'amend' && titled.length && !titled.some((a) => a.ref === c.ref) && !topicWords.some((w) => String(c.title || '').includes(w))).map((c) => `${c.ref}(${c.title}): 요청 주제와 제목이 맞는 조문(${titled.slice(0, 3).map((a) => `${a.ref} ${a.title}`).join(', ')})이 따로 있습니다. 고칠 조문이 맞는지 확인하세요.`);
     const checks = [
+      gateSkipped,
       orgMismatch,
       ...offTopic,
       sibling ? `이 규정에는 해당 주제 조문이 없어 새 조문을 만들었습니다. 같은 기관 「${sibling.title}」 ${sibling.ref}(${sibling.art_title})에 이미 같은 주제가 있습니다 — 그 규정을 고치는 것이 맞는지, 이 규정은 그 규정을 따르도록 할지 확인하세요.` : null,

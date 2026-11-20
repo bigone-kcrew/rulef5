@@ -1,4 +1,5 @@
 // 개정 준비 단계 입력: 대상 규정 + 개정 의도 (고급 옵션: 조 번호 처리)
+import { FastToggle, useFast } from '@/components/fast-toggle'
 import { useState } from 'react'
 import { CornerDownLeftIcon } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,6 +18,7 @@ export function AmendForm({ preset, busy, onRun }: { preset?: AmendPreset | null
   const [picked, setPicked] = useState<Picked | null>(null)
   const [intent, setIntent] = useState(preset?.intent || '')
   const [renumber, setRenumber] = useState('false')
+  const [fast, setFast] = useFast()
   const [lawTarget, setLawTarget] = useState(false)
   return (
     <div className="flex flex-col gap-8">
@@ -52,9 +54,10 @@ export function AmendForm({ preset, busy, onRun }: { preset?: AmendPreset | null
         </Collapsible>
       </section>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+        <FastToggle fast={fast} setFast={setFast} />
         {!picked && <span className="text-sm text-muted-foreground">먼저 규정을 고르세요</span>}
         {picked && !intent.trim() && <span className="text-sm text-muted-foreground">바꿀 내용을 적으세요</span>}
-        <Button size="lg" disabled={!picked || !intent.trim() || busy} onClick={() => picked && onRun({ doc_id: picked.doc.doc_id, intent: intent.trim(), refs: picked.refs, renumber: renumber === 'true', extraDocIds: picked.uploads.filter((d) => d !== picked.doc.doc_id) })}>
+        <Button size="lg" disabled={!picked || !intent.trim() || busy} onClick={() => picked && onRun({ doc_id: picked.doc.doc_id, intent: intent.trim(), refs: picked.refs, renumber: renumber === 'true', extraDocIds: picked.uploads.filter((d) => d !== picked.doc.doc_id), auto: fast || undefined })}>
           {busy ? <Spinner data-icon="inline-start" /> : <CornerDownLeftIcon data-icon="inline-start" />}초안 만들기
         </Button>
       </div>

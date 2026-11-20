@@ -27,6 +27,7 @@ export function summarizeLogs(dir, days = 7) {
   const amend = am.length ? { n: am.length, absent_topic: cnt('absent_topic'), sibling: cnt('sibling'), review_applied: cnt('review_applied'), review_rejected: cnt('review_rejected'), review_remaining: cnt('review_remaining'), dropped: cnt('dropped'), not_reflected: cnt('not_reflected'), evidence_errors: cnt('evidence_errors'), org_mismatch: cnt('org_mismatch'), picker_fallback: recs.filter((r) => r.metrics?.picker_fallback).length } : null;
   const ag = recs.map((r) => r.metrics?.agent).filter(Boolean);
   const agent = ag.length ? { n: ag.length, replans: ag.filter((a) => a.replans).length, unfinished: ag.filter((a) => !a.finished).length } : null;
-  const gates = Object.entries(by(recs.flatMap((r) => (r.gates || []).map(([id, w]) => ({ id, w }))), (g) => g.id)).map(([id, xs]) => ({ id, n: xs.length, median_ms: med(xs.map((x) => x.w)) }));
+  // 확인 단계별 대기 시간과 「추천을 바꾼 비율」(늘 그대로 받는 단계는 건너뛰어도 된다는 근거)
+  const gates = Object.entries(by(recs.flatMap((r) => (r.gates || []).map(([id, w, c]) => ({ id, w, c }))), (g) => g.id)).map(([id, xs]) => { const known = xs.filter((x) => typeof x.c === 'boolean'); return { id, n: xs.length, median_ms: med(xs.map((x) => x.w)), changed: known.filter((x) => x.c).length, known: known.length }; });
   return { days, total: recs.length, byType, failures, slowSteps, amend, agent, gates };
 }

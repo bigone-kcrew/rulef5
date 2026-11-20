@@ -1,6 +1,6 @@
 // 에이전트 진행 타임라인: 단계가 실시간으로 펼쳐지고, 사람 확인 지점에서 멈춘다
 import { DocLink } from '@/components/doc-viewer'
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { CheckIcon, XIcon, MinusIcon, HandIcon, FileSearchIcon, ChevronDownIcon, TerminalIcon, RotateCwIcon } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
@@ -22,23 +22,39 @@ function Elapsed({ since, stop, span }: { since: number; stop: boolean; span?: n
 function GateCard({ gate, onAnswer }: { gate: Gate; onAnswer: (v: unknown) => Promise<void> }) {
   const [sel, setSel] = useState<string[]>(() => (gate.options || []).filter((o) => o.checked).map((o) => o.value))
   const [sending, setSending] = useState(false)
-  const toggle = (v: string, c: boolean) => setSel(gate.multi ? (c ? [...sel, v] : sel.filter((x) => x !== v)) : c ? [v] : [])
+  const toggle = (v: string, c: boolean) => setSel((cur) => (gate.multi ? (c ? [...cur, v] : cur.filter((x) => x !== v)) : c ? [v] : []))
+  const opts = gate.options || []
+  const send = async () => { if (sending) return; setSending(true); try { await onAnswer(gate.multi ? sel : sel[0] ?? null) } catch (e) { alert((e as Error).message); setSending(false) } }
+  // 키보드: Enter = 지금 선택(추천)대로 확인, 1~9 = 그 번호 선택 켜고 끄기 — 입력 중이거나 다른 창이 열려 있으면 무시
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (e.ctrlKey || e.metaKey || e.altKey || (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName) || t.isContentEditable)) || document.querySelector('[role="dialog"]')) return
+      if (e.key === 'Enter') { e.preventDefault(); send(); return }
+      const n = /^[1-9]$/.test(e.key) ? +e.key - 1 : -1
+      if (n >= 0 && n < opts.length) { e.preventDefault(); const v = opts[n].value; toggle(v, !sel.includes(v)) }
+    }
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
+  })
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="relative rounded-lg border-2 border-primary bg-primary/5 p-4">
       <span className="absolute -top-3 left-4 flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground"><HandIcon className="size-3.5" />사람 확인</span>
       <p className="mb-3 mt-1 font-semibold">{gate.prompt}</p>
       <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto pr-1">
-        {(gate.options || []).map((o, i) => (
-          <motion.label key={o.value} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className={`flex cursor-pointer items-start gap-3 rounded-md border p-2.5 transition-colors ${sel.includes(o.value) ? 'bg-muted/50' : 'text-muted-foreground hover:bg-muted/30'}`}>
+        {opts.map((o, i) => (<Fragment key={o.value}>
+          {o.group && o.group !== opts[i - 1]?.group && <div className="mt-1 text-xs font-semibold text-muted-foreground first:mt-0">{o.group}</div>}
+          <motion.label initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className={`flex cursor-pointer items-start gap-3 rounded-md border p-2.5 transition-colors ${sel.includes(o.value) ? 'bg-muted/50' : 'text-muted-foreground hover:bg-muted/30'}`}>
+            {i < 9 && <kbd className="mt-0.5 hidden rounded border px-1 font-mono text-[10px] text-muted-foreground sm:inline">{i + 1}</kbd>}
             <Checkbox className="mt-0.5" checked={sel.includes(o.value)} onCheckedChange={(c) => toggle(o.value, !!c)} />
             <span className="min-w-0 text-sm"><span className="font-medium">{o.doc_id ? <DocLink docId={o.doc_id} refName={o.ref}>{o.label}</DocLink> : o.label}</span>{o.detail && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{o.detail}</span>}</span>
           </motion.label>
-        ))}
+        </Fragment>))}
       </div>
       <div className="mt-3 flex items-center gap-2">
         {gate.multi && <Button variant="ghost" size="sm" onClick={() => setSel((gate.options || []).map((o) => o.value))}>모두 선택</Button>}
         <span className="text-xs text-muted-foreground">{sel.length}개 선택</span>
-        <Button className="ml-auto" disabled={sending} onClick={async () => { setSending(true); try { await onAnswer(gate.multi ? sel : sel[0] ?? null) } catch (e) { alert((e as Error).message); setSending(false) } }}>{sending && <Spinner data-icon="inline-start" />}확인하고 계속</Button>
+        <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">Enter 확인 · 숫자 키 선택</span>
+        <Button disabled={sending} onClick={send}>{sending && <Spinner data-icon="inline-start" />}확인하고 계속</Button>
       </div>
     </motion.div>
   )

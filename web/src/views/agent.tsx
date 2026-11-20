@@ -1,4 +1,5 @@
 // 대화로 요청(F4): 요청 → 계획 → 도구 실행 기록 → 사람 확인 → 결과. 문서 세트가 나오면 절차 화면으로 이어 간다.
+import { FastToggle, useFast } from '@/components/fast-toggle'
 import { useState } from 'react'
 import { ArrowRightIcon, ArrowUpIcon, CheckIcon, CircleIcon, MinusIcon, XIcon } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
@@ -29,14 +30,15 @@ export default function AgentView() {
   // 개정·제정 요청이면 초안 다음 기관 절차도 미리 보여 준다(F2·F3 절차 화면에서 이어 감)
   const drafting = plan?.intents?.some((x: string) => x === 'amend' || x === 'enact') || plan?.steps?.some((x: any) => /^draft_/.test(x.tool))
   const nextSteps = (procedures[profile.type]?.steps || []).filter((x: any) => x.id !== 'draft' && !x.optional).map((x: any) => x.title.split(/[·(]/)[0].trim())
-  const send = () => { const m = msg.trim(); if (!m) return; setSent(m); setMsg(''); job.start('agent', { message: m, doc_id: picked?.doc.doc_id, extraDocIds: picked?.uploads }) }
+  const [fast, setFast] = useFast()
+  const send = () => { const m = msg.trim(); if (!m) return; setSent(m); setMsg(''); job.start('agent', { message: m, doc_id: picked?.doc.doc_id, extraDocIds: picked?.uploads, auto: fast || undefined }) }
   const r = job.job?.status === 'done' ? job.job.result : null
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-2 rounded-md border bg-background p-2 focus-within:ring-2 focus-within:ring-ring/40">
           <Textarea rows={3} className="border-0 bg-transparent shadow-none focus-visible:ring-0" maxLength={2000} value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() }} placeholder="예: 우리 복무규정 배우자 출산휴가를 법 개정에 맞게 20일로 고쳐야 해" />
-          <div className="flex items-center gap-2"><span className="font-mono text-[11px] text-muted-foreground">Ctrl + Enter</span><Button className="ml-auto" disabled={!msg.trim() || job.busy} onClick={send}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowUpIcon data-icon="inline-start" />}보내기</Button></div>
+          <div className="flex items-center gap-2"><span className="font-mono text-[11px] text-muted-foreground">Ctrl + Enter</span><span className="ml-auto"><FastToggle fast={fast} setFast={setFast} /></span><Button disabled={!msg.trim() || job.busy} onClick={send}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowUpIcon data-icon="inline-start" />}보내기</Button></div>
         </div>
         <div className="flex flex-col items-start gap-1.5">
           <span className="text-xs text-muted-foreground">예시를 눌러 채우기</span>

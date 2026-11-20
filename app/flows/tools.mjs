@@ -193,6 +193,8 @@ export const TOOLS = {
     desc: '판단이 필요할 때 사용자에게 묻는다(선택지 2~6개).', args: { question: '질문', options: '["선택지"]' },
     async run(a, deps, st, ctx) {
       // 규정을 불러온 뒤 「조문 번호를 알려 달라」는 질문은 묻지 않는다 — 개정 흐름이 조문을 찾고 없으면 새 조문으로 둔다
+      // 규정을 불러온 뒤에는 묻지 않는다 — 질문은 시작할 때(대상 규정을 특정할 수 없을 때)만. 이후 판단은 개정 흐름의 확인 화면에서 한 번에 받는다
+      if (st.doc) return { summary: '규정을 불러온 뒤에는 따로 묻지 않고 진행합니다. 대상 조문과 근거는 개정안 작성 단계의 확인 화면에서 고릅니다.' };
       if (st.doc && /조문\s*번호|몇\s*조|어느\s*조|해당\s*조(?:문|항)/.test(String(a.question || ''))) return { summary: '조문 번호는 묻지 않습니다. draft_amendment 를 refs 없이 실행하면 개정 흐름이 대상 조문을 찾고, 없으면 새 조문으로 둡니다.' };
       const opts = (Array.isArray(a.options) ? a.options : []).map((o) => str(String(o), 100)).filter(Boolean).slice(0, 6);
       // 자동 실행(평가·스크립트)에서는 사람에게 묻지 않고 첫 선택지로 진행한다
