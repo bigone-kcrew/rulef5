@@ -176,3 +176,12 @@ test('every finished job leaves an improvement record with status, step times an
   assert.equal(r.metrics.amend.ops, 'amend'); assert.equal(typeof r.metrics.amend.checklist, 'number');
   assert.ok(!JSON.stringify(r).includes('비밀스러운'));
 });
+test('amending an article whose title has nothing to do with the request warns when a matching article exists', async () => {
+  const D = parseRegulationText('다 규칙\n제5조(당직자의 휴무) 당직자는 다음 날 휴무한다.\n제15조(긴급사태 시 임무) 당직자는 긴급사태를 보고한다.', { doc_id: 'upload:dddddddddddddddd/0', title: '다 규칙' });
+  const src = { ...sources, loadDoc: async () => D };
+  const draft = { changes: [{ op: 'amend', ref: '제15조', new_text: '당직자는 긴급사태를 보고하고 다음 날 휴무한다.', basis_ids: [] }], reason_summary: 's', main_points: [], addenda: {}, checks: [] };
+  const jobs = createJobs();
+  const j = await until(jobs, jobs.start('amend', { doc_id: D.doc_id, intent: '당직 다음 날 휴무를 보장한다', refs: ['제15조'], auto: true }, runAmend, { deps: { sources: src, llm: llmOf(draft, { issues: [] }) } }));
+  assert.equal(j.status, 'done', JSON.stringify(j.error));
+  assert.match(j.result.docset.sections.find((s) => s.id === 'checklist').body, /제15조\(긴급사태 시 임무\): 요청 주제와 제목이 맞는 조문\(제5조 당직자의 휴무\)/);
+});

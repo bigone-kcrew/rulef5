@@ -288,8 +288,13 @@ export async function runAmend(ctx) {
         if (x) sibling = { doc_id: x.doc_id, title: x.doc_title, ref: x.art_ref, art_title: x.art_title };
       } catch { /* 조회 실패는 건너뛴다 */ }
     }
+    // 주제 조문이 따로 있는데 다른 조문을 고친 경우(예: 휴무를 정한 제5조가 있는데 제15조를 고침) — 대상 조문을 다시 보라고 알린다
+    const topicWords = keywords(intent).filter((w) => w.length >= 2 && !/^(개정|규정|조문|맞게|따라|법률|시행|변경|수정)$/.test(w));
+    const titled = main.filter((a) => topicWords.some((w) => String(a.title || '').includes(w)));
+    const offTopic = absentTopic ? [] : changes.filter((c) => c.op === 'amend' && titled.length && !titled.some((a) => a.ref === c.ref) && !topicWords.some((w) => String(c.title || '').includes(w))).map((c) => `${c.ref}(${c.title}): 요청 주제와 제목이 맞는 조문(${titled.slice(0, 3).map((a) => `${a.ref} ${a.title}`).join(', ')})이 따로 있습니다. 고칠 조문이 맞는지 확인하세요.`);
     const checks = [
       orgMismatch,
+      ...offTopic,
       sibling ? `이 규정에는 해당 주제 조문이 없어 새 조문을 만들었습니다. 같은 기관 「${sibling.title}」 ${sibling.ref}(${sibling.art_title})에 이미 같은 주제가 있습니다 — 그 규정을 고치는 것이 맞는지, 이 규정은 그 규정을 따르도록 할지 확인하세요.` : null,
       ...review.remaining.map((x) => `자체 검토 후 남은 문제 — ${x}`),
       ...review.applied.map((x) => `자체 검토로 고친 점(대조 확인) — ${x}`),

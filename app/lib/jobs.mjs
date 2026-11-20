@@ -66,7 +66,8 @@ export function createJobs({ maxConcurrent = 4, ttlMs = 3600e3, gateTimeoutMs = 
 
   function get(id) {
     const j = jobs.get(id); if (!j) return null;
-    const { waiter, owner, gates, metrics, ...view } = j; return JSON.parse(JSON.stringify(view));
+    j.polled = Date.now(); // 화면이 지켜보고 있는지(확인 대기 작업이 버려졌는지) 판단용
+    const { waiter, owner, gates, metrics, polled, ...view } = j; return JSON.parse(JSON.stringify(view));
   }
   function answer(id, gateId, value) {
     const j = jobs.get(id);
@@ -76,6 +77,7 @@ export function createJobs({ maxConcurrent = 4, ttlMs = 3600e3, gateTimeoutMs = 
     w.resolve(value); return true;
   }
   // 진행 중(실행·확인 대기) 작업 수 — 서버를 다시 띄우기 전에 확인한다(작업은 메모리에만 있다)
-  const active = () => [...jobs.values()].filter((j) => j.status === 'running' || j.status === 'waiting').length;
+  // 실행 중 작업 + 최근 5분 안에 화면이 확인한 확인 대기 작업(창을 닫아 버려진 확인 대기는 세지 않는다 — 30분 뒤 자동 종료)
+  const active = () => [...jobs.values()].filter((j) => j.status === 'running' || (j.status === 'waiting' && Date.now() - (j.polled || j.updated) < 5 * 60e3)).length;
   return { start, get, answer, active };
 }

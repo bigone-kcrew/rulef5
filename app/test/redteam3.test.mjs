@@ -172,3 +172,13 @@ test('full text after amendment applies amended, inserted, deleted and moved art
   assert.ok(i('제2장 보칙') > i('제1장 총칙'));
   assert.ok(i('〈이번 개정〉') > i('2020.1.1.') && i('〈이번 개정〉') < i('[별표 1] 서식'));
 });
+test('a confirmation that nobody is watching stops counting as active after 5 minutes', async () => {
+  const { createJobs } = await import('../lib/jobs.mjs');
+  const jobs = createJobs();
+  const id = jobs.start('x', {}, async (ctx) => { await ctx.gate({ id: 'g' }); });
+  await new Promise((r) => setTimeout(r, 20));
+  jobs.get(id); assert.equal(jobs.active(), 1);
+  const realNow = Date.now; Date.now = () => realNow() + 6 * 60e3;
+  try { assert.equal(jobs.active(), 0); } finally { Date.now = realNow; }
+  jobs.answer(id, 'g', 1);
+});
