@@ -143,6 +143,8 @@ export const TOOLS = {
       if (!run) return { summary: '상위법 영향 기능이 연결되어 있지 않습니다.' };
       let before = str(a.before_text, 3000), after = str(a.after_text, 3000), note = '';
       const ref = str(a.ref, 20).replace(/\s/g, '');
+      // 법령 조문 번호를 모르고 개정 전·후 문구도 없으면 영향 분석은 건너뛴다(개정안 작성은 그대로 진행)
+      if ((!before || !after) && !/^제\d+조(의\d+)?$/.test(ref)) return { summary: '상위 법령의 조문 번호(예: 제18조의2)를 특정하지 못해 영향 분석은 건너뜁니다. 개정안 작성은 그대로 진행합니다.' };
       if ((!before || !after) && ref && (a.law_name || st.params?.law_name)) {
         const v = await lawVersions(deps.sources, { name: str(a.law_name, 80) || st.params.law_name, ref, topic: str(a.topic, 60) });
         if (v.before && v.after) { before = v.before.text; after = v.after.text; note = ` (판본 ${v.before.effective_from} → ${v.after.effective_from})`; }

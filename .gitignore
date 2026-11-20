@@ -10,3 +10,7 @@ web/node_modules/
 # 웹 전용 페이지(저장소 제외)
 /web/public/submit/
 /app/public/submit/
+
+# 사이트에서만 내보내는 시연 영상(저장소 제외)
+/web/public/media/
+/app/public/media/

@@ -111,7 +111,11 @@ export async function runAgent(ctx) {
         replans++;
         try {
           const n = await llm.chatJson(nextPrompt(input, tools, obs), (o) => { if (!Object.hasOwn(tools, o.tool)) throw new Error(`도구 ${o.tool} 는 없습니다.`); return o; }, { maxTokens: 1200 });
-          ctx.log(`↻ 다시 계획: ${n.thought || ''} → ${n.tool}`); queue.splice(i + 1, 0, { tool: n.tool, args: n.args || {}, why: n.thought || '', done: false }); view();
+          // 화면에 보이는 이유 문장에서 영문 도구 이름은 우리말로 바꾸고, 이미 뒤에 잡혀 있는 단계는 다시 넣지 않는다(같은 단계 두 번 실행 방지)
+          const why = String(n.thought || '').replace(/\b[a-z]+(?:_[a-z]+)+\b/g, (k) => TOOL_KO[k] || k).replace(/\s*도구를\s*(사용|실행|호출)한다/g, '을(를) 진행한다');
+          const later = queue.slice(i + 1).some((x) => x.tool === n.tool && !x.done && !x.skipped);
+          ctx.log(`↻ 다시 계획: ${why} → ${TOOL_KO[n.tool] || n.tool}${later ? '(이미 계획에 있어 그대로 진행)' : ''}`);
+          if (!later) queue.splice(i + 1, 0, { tool: n.tool, args: n.args || {}, why, done: false }); view();
         } catch { ctx.log('↻ 다시 계획 실패'); }
       } else if (['draft_amendment', 'draft_enactment'].includes(item.tool)) throw e;
     }
