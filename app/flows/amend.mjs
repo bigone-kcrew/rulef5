@@ -107,7 +107,8 @@ export async function runAmend(ctx) {
 
   // 의도의 주제(예: 배우자 출산휴가)를 정한 조문이 이 규정에 아예 없으면 기존 조문에 끼워 넣지 말고 새 조문으로 둔다
   let absentTopic = null;
-  const hasTopic = (topic) => { const f = topic.replace(/\s+/g, ''), ws = topic.split(/\s+/).filter((w) => w.length >= 2); return doc.articles.some((a) => { const t = `${a.title || ''} ${a.body || ''}`; return t.replace(/\s+/g, '').includes(f) || ws.filter((w) => t.includes(w)).length * 2 >= Math.max(2, ws.length); }); };
+  // 규정에 그 주제 조문이 있는지(코드 판단): 조 제목에 주제 낱말이 있거나, 한 조문 본문에 주제 낱말이 모두 있으면 있는 것으로 본다
+  const hasTopic = (topic) => { const ws = topic.split(/\s+/).filter((w) => w.length >= 2); if (!ws.length) return true; return doc.articles.some((a) => ws.some((w) => String(a.title || '').includes(w)) || ws.every((w) => String(a.body || '').includes(w))); };
   const refs = await ctx.step('대상 조문 찾기', async (s) => {
     if (Array.isArray(input.refs) && input.refs.length) {
       const bad = input.refs.filter((r) => !byRef.has(r));
@@ -127,7 +128,7 @@ export async function runAmend(ctx) {
         suggested = o.refs.slice(0, 4); why = o.why || 'AI 추천';
         const topic = typeof o.topic === 'string' ? o.topic.replace(/[「」"']/g, '').trim().slice(0, 30) : '';
         // 모델도 「없다」고 하고(exists=false) 코드로도 어느 조문에도 주제 낱말이 절반 이상 함께 나오지 않을 때만
-        if (topic.length >= 2 && String(o.exists) === 'false' && !hasTopic(topic)) { absentTopic = topic; why = `이 규정에는 「${topic}」 조문이 없어 새 조문으로 둡니다(아래는 새 조문을 둘 자리 후보) — ${why}`; }
+        if (topic.length >= 2 && !hasTopic(topic)) { absentTopic = topic; why = `이 규정에는 「${topic}」 조문이 없어 새 조문으로 둡니다(아래는 새 조문을 둘 자리 후보) — ${why}`; }
       } catch (e) { ctx.log(`AI 조문 추천 실패(${e.code || 'error'}) — 핵심어 일치 결과를 씁니다.`); ctx.metric?.('picker_fallback', e.code || 'error'); }
     }
     s.note(`추천: ${suggested.join(', ') || '없음'} (${why})`);

@@ -130,7 +130,9 @@ export const TOOLS = {
   draft_enactment: {
     desc: '새 규정의 조문 체계와 표준 조문 초안, 제정 문서 세트를 만든다(사람 확인 포함).', args: { title: '제명', purpose: '제정 목적', kind: '규정|지침|조례 등' },
     async run(a, deps, st, ctx) {
-      const title = str(a.title, 80) || st.params?.title, purpose = str(a.purpose, 2000) || st.params?.purpose || ctx.input.message;
+      // 모델이 제명을 빠뜨리면 요청 문장에서 「…지침/규칙/규정/조례」를 찾아 쓴다
+      const fromMsg = (String(ctx.input.message || '').match(/([가-힣A-Za-z0-9·\s]{2,40}?(?:지침|규칙|규정|조례|요령|세칙|기준))\s*(?:을|를|은|는|이|가)?\s*(?:새로|제정|만들)/) || [])[1]?.trim();
+      const title = str(a.title, 80) || st.params?.title || fromMsg, purpose = str(a.purpose, 2000) || st.params?.purpose || ctx.input.message;
       if (!title) throw fail('no_title', '제정할 규정의 제명이 필요합니다.');
       st.result = await runEnact(sub(ctx, { title, purpose, kind: str(a.kind, 10) || st.params?.kind || '지침', delegations: [], auto: ctx.input.auto }));
       return { summary: `제정 문서 세트 완성: ${st.result.articles.length}개 조` };

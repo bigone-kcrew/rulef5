@@ -86,12 +86,12 @@ export async function runBulk(ctx) {
     const virtual = docs.map((d) => { const p = per.find((x) => x.doc_id === d.doc_id); return p ? { ...d, articles: d.articles.map((a) => { const c = a.section !== '부칙' && p.changes.find((x) => x.ref === (a.ref || a.title) && x.section === a.section); return c ? { ...a, body: c.new } : a; }) } : d; });
     const recheck = checkDocs(virtual, {}).filter((f) => f.type === 'term' || f.type === 'broken_ref').filter((f) => per.some((p) => p.doc_id === f.doc_id));
     const draft = per.map((p) => p.directive).join('\n\n───\n\n');
-    const rows = per.flatMap((p) => buildComparison(p.changes.map((c) => ({ ...c, ref: c.ref, title: `${c.title}` }))).map((r, i) => (i === 0 ? { ...r, oldHtml: `<u>[${esc(p.title)}]</u><br>${r.oldHtml}` } : r)));
+    const rows = per.flatMap((p) => buildComparison(p.changes.map((c) => ({ ...c, ref: c.ref, title: `${c.title}` }))).map((r, i) => ({ ...(i === 0 ? { ...r, oldHtml: `<u>[${esc(p.title)}]</u><br>${r.oldHtml}` } : r), doc_id: p.doc_id })));
     const checks = [`"${find}" → "${replace}" ${per.reduce((n, p) => n + p.changes.reduce((m, c) => m + c.points.length, 0), 0)}곳 변경(${per.length}개 규정)`, `미승인(합성어 의심 등) ${points.length - [...approved].length}곳은 그대로 두었습니다.`, ...(points.length > 200 ? [`바꿀 곳이 ${points.length}곳이라 승인 목록에는 앞 200곳만 보였습니다. 나머지는 규정을 나눠 다시 실행하세요.`] : []), ...recheck.map((f) => `재검증: ${f.doc_title} ${f.ref} ${f.message}`), '부칙·연혁의 과거 명칭과 「」 안 법령명은 바꾸지 않았습니다.'];
     s.note(`${per.length}개 규정 · ${per.reduce((n, p) => n + p.changes.length, 0)}개 조문${recheck.length ? ` · 재검증 문제 ${recheck.length}건` : ''}`);
     // 규정별 개정 후 전문(바꾼 문구를 반영한 전체 본문, 바뀐 조문 표시)
     const fullText = per.map((p) => consolidatedDoc({ doc: virtual.find((d) => d.doc_id === p.doc_id), changes: p.changes.filter((c) => c.section === '본칙'), normalize: normalizeArticle })).join('\n\n════════\n\n');
     const sections = [{ id: 'draft', title: '일괄 개정문', body: draft }, { id: 'comparison', title: '신구조문대비표(규정별)', rows }, { id: 'full_text', title: '개정 후 전문(규정별)', body: fullText }, { id: 'checklist', title: '검토 체크리스트', body: checks.map((x) => `☐ ${x}`).join('\n') }];
-    return { kind: '일괄개정', per_doc: per.map(({ changes, ...p }) => ({ ...p, n: changes.length })), docset: { kind: '일괄개정', title: `${find}→${replace} 일괄 개정`, sections, evidence: docs.map((d) => ({ label: d.title, doc_id: d.doc_id })) }, docKeys: ['draft', 'comparison', 'checklist'] };
+    return { kind: '일괄개정', per_doc: per.map(({ changes, ...p }) => ({ ...p, n: changes.length, changes: changes.filter((c) => c.section === '본칙').map((c) => ({ op: 'amend', ref: c.ref, title: c.title })) })), docset: { kind: '일괄개정', title: `${find}→${replace} 일괄 개정`, sections, evidence: docs.map((d) => ({ label: d.title, doc_id: d.doc_id })) }, docKeys: ['draft', 'comparison', 'checklist'] };
   });
 }

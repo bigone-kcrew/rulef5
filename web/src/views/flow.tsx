@@ -19,7 +19,7 @@ import { EnactForm } from '@/views/enact'
 import { useJob } from '@/hooks/use-job'
 import { useApp } from '@/lib/app-state'
 import { DOC_LABELS, api } from '@/lib/api'
-import type { DocSet, Section } from '@/lib/export'
+import { changesFromRows, type DocSet, type Section } from '@/lib/export'
 
 type Mode = 'amend' | 'enact'
 type Flow = { step: string; done: string[]; result: any | null; sections: Section[] | null; jobId?: string; opinionJob?: string }
@@ -105,14 +105,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
   const [rebuilding, setRebuilding] = useState(false)
   const rebuildFull = async () => {
     const rows = sec('comparison')?.rows || [], cur = sec('full_text'); if (!cur || !flow.result?.doc?.doc_id) return
-    const txt = (h: string) => { const el = document.createElement('div'); el.innerHTML = String(h || '').replace(/<br\s*\/?>/gi, '\n'); return (el.textContent || '').trim() }
-    const head = /^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*/
-    const changes = (flow.result.changes || []).map((c: any) => {
-      if (c.op === 'delete') return c
-      const rs = rows.filter((r) => r.ref === c.ref); if (!rs.length) return c
-      const paras = rs.map((r) => { const n = txt(r.newHtml), o = txt(r.oldHtml); return n === '(현행과 같음)' ? o : /^<\s*삭\s*제\s*>$/.test(n) ? '' : n }).filter(Boolean)
-      return { ...c, new: paras.map((p, i) => (i === 0 ? p.replace(head, '') : p)).join('\n') }
-    })
+    const changes = changesFromRows(flow.result.changes || [], rows)
     setRebuilding(true)
     try { const r = await api<{ body: string }>('/api/fulltext', { method: 'POST', body: { doc_id: flow.result.doc.doc_id, changes, addenda: sec('addenda')?.body || '' } }); update({ ...cur, body: r.body }) } catch (e) { window.alert(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
   }
@@ -179,7 +172,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                   <TabsList className="flex-wrap">{CORE.filter((id) => sec(id)).map((id) => <TabsTrigger key={id} value={id}>{sec(id)!.title}</TabsTrigger>)}</TabsList>
                   {CORE.filter((id) => sec(id)).map((id) => <TabsContent key={id} value={id} className="rounded-md border bg-background p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} /></TabsContent>)}
                 </Tabs>
-                {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표나 부칙을 고쳤다면</span><Button variant="outline" size="xs" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
+                {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표·부칙을 고쳤다면(개정문만 고쳤다면 대비표에도 같게 고친 뒤)</span><Button variant="outline" size="xs" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
                 <section className="flex flex-col gap-2">
                   <h3 className="flex items-center gap-2 font-semibold"><ListChecksIcon className="size-4" />확인할 점</h3>
                   {CHECKS.filter((id) => sec(id)).map((id, i) => (

@@ -13,7 +13,8 @@ import { Spinner } from '@/components/ui/spinner'
 import { JobTimeline } from '@/components/job-timeline'
 import { useJob } from '@/hooks/use-job'
 import { MessageSquareQuoteIcon } from 'lucide-react'
-import { download, downloadHwpx, toCsv, toHtml, toMd, type DocSet, type Section } from '@/lib/export'
+import { changesFromRows, download, downloadHwpx, toCsv, toHtml, toMd, type DocSet, type Section } from '@/lib/export'
+import { api } from '@/lib/api'
 
 const ICONS: Record<string, typeof FileTextIcon> = { draft: FileTextIcon, comparison: ColumnsIcon, comparison_other: ColumnsIcon, reason: ScrollTextIcon, addenda: StampIcon, notice: MegaphoneIcon, corrections: LinkIcon, checklist: ListChecksIcon, evidence: LibraryIcon }
 
@@ -39,8 +40,20 @@ export function DocsetBoard({ result }: { result: any }) {
     return [[changed, ds.kind === '제정' ? '조문' : '변경 조문'], [cmp?.rows?.length || 0, '대비표 행'], [ds.evidence.filter((e) => !/^대상 규정/.test(e.label)).length, '근거 자료'], [checks, '검토 항목']] as [number, string][]
   }, [ds])
   // 편집된 현재 내용
-  const current = (): DocSet => ({ ...ds, sections: ds.sections.map((s) => { const el = editors.current[s.id]; if (!el) return s; if (s.rows) return { ...s, rows: [...el.querySelectorAll('tbody tr')].map((tr, k) => ({ ref: s.rows![k]?.ref || '', oldHtml: (tr as HTMLTableRowElement).cells[0].innerHTML, newHtml: (tr as HTMLTableRowElement).cells[1].innerHTML })) }; return { ...s, body: el.innerText } }) })
+  const current = (): DocSet => ({ ...ds, sections: ds.sections.map((s) => { const el = editors.current[s.id]; if (!el) return s; if (s.rows) return { ...s, rows: [...el.querySelectorAll('tbody tr')].map((tr, k) => ({ ref: s.rows![k]?.ref || '', doc_id: s.rows![k]?.doc_id, oldHtml: (tr as HTMLTableRowElement).cells[0].innerHTML, newHtml: (tr as HTMLTableRowElement).cells[1].innerHTML })) }; return { ...s, body: el.innerText } }) })
   const fname = (ext: string) => `${ds.title}_${ds.kind}안.${ext}`.replace(/[\\/:*?"<>|\s]+/g, '_')
+  // 일괄 개정: 화면에서 고친 대비표로 규정별 개정 후 전문을 다시 만든다(모델 없이)
+  const [rebuilding, setRebuilding] = useState(false)
+  const canRebuild = Array.isArray(result.per_doc) && result.per_doc.some((p: any) => p.changes?.length) && ds.sections.some((s) => s.id === 'full_text')
+  const rebuild = async () => {
+    const rows = current().sections.filter((s) => s.rows).flatMap((s) => s.rows!)
+    setRebuilding(true)
+    try {
+      const bodies: string[] = []
+      for (const p of result.per_doc) { if (!p.changes?.length) continue; const r = await api<{ body: string }>('/api/fulltext', { method: 'POST', body: { doc_id: p.doc_id, changes: changesFromRows(p.changes, rows.filter((x) => x.doc_id === p.doc_id)) } }); bodies.push(r.body) }
+      const el = editors.current['full_text']; if (el) el.innerText = bodies.join('\n\n════════\n\n')
+    } catch (e) { window.alert(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
+  }
   const sec = ds.sections.find((s) => s.id === active)
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: 'easeOut' }}>
@@ -85,6 +98,7 @@ export function DocsetBoard({ result }: { result: any }) {
         {Array.isArray(result.changes) && result.changes.length > 0 && <CardContent><OpinionPanel result={result} /></CardContent>}
         <CardFooter className="flex flex-wrap gap-2">
           {status?.features?.hwpx && <Button disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), current()) } catch (e) { window.alert((e as Error).message) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
+          {canRebuild && <Button variant="outline" disabled={rebuilding} onClick={rebuild}>{rebuilding ? <Spinner data-icon="inline-start" /> : <FileTextIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button>}
           <Button variant={status?.features?.hwpx ? 'outline' : 'default'} onClick={() => download(fname('md'), toMd(current()), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
           <Button variant="outline" onClick={() => download(fname('html'), toHtml(current()), 'text/html')}><DownloadIcon data-icon="inline-start" />문서(HTML·인쇄용)</Button>
           {ds.sections.some((s) => s.rows) && <Button variant="outline" onClick={() => download(fname('csv'), toCsv(current().sections.filter((s) => s.rows).flatMap((s) => s.rows!)), 'text/csv')}><SheetIcon data-icon="inline-start" />대비표 CSV</Button>}

@@ -96,6 +96,8 @@ export async function runAgent(ctx) {
   for (let i = 0; i < queue.length && executed < MAX_STEPS && !finished; i++) {
     const item = queue[i], tool = Object.hasOwn(tools, item.tool) ? tools[item.tool] : null;
     if (!tool) { ctx.log(`✗ 알 수 없는 도구 '${item.tool}' — 건너뜁니다.`); item.skipped = true; view(); continue; }
+    // 조문 번호를 모르는 채(「제X조」「제○조」) 조문 보기를 부르는 단계는 계획에서 뺀다 — 개정 흐름이 대상 조문을 스스로 찾는다
+    if (item.tool === 'get_article' && !/^제\s*\d+\s*조(의\s*\d+)?$/.test(String(item.args?.ref || '').trim())) { ctx.log('· 조문 번호가 정해지지 않아 조문 보기는 건너뜁니다.'); queue.splice(i, 1); i--; view(); continue; }
     const key = item.tool + JSON.stringify(item.args);
     if (seen.has(key)) { ctx.log(`✗ 같은 호출 반복 차단: ${item.tool}`); item.skipped = true; view(); continue; }
     seen.add(key); executed++;

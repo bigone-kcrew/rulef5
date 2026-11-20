@@ -19,15 +19,17 @@ const sources = createSources(process.env, fetch, { cacheDir: join(root, 'app', 
 const deps = { sources, llm, env: process.env, procedures: loadProcedures() };
 const PUB = { name: '예시 공공기관', type: 'public-institution' };
 const CASES = [
-  { id: 'A1', msg: '창업진흥원 취업규칙의 배우자 출산휴가를 남여고용평등법 개정에 맞게 고쳐야해', inst: '창업진흥원', doc: /^취업규칙$/, op: 'insert', sibling: true, topic: '배우자' },
-  { id: 'A2', msg: '창업진흥원 복무규정 배우자 출산휴가를 남녀고용평등법 개정에 맞게 고쳐줘', inst: '창업진흥원', doc: /^복무규정$/, refs: ['제44조의2'], topic: '배우자' },
-  { id: 'A3', msg: '창업진흥원 복무규정에서 배우자 출산휴가를 출산예정일 50일 전부터 쓸 수 있게 해줘', inst: '창업진흥원', doc: /^복무규정$/, refs: ['제44조의2'], nums: ['50일'], topic: '배우자' },
-  { id: 'A4', msg: '소상공인시장진흥공단 복무규정의 배우자 출산휴가를 20일로 늘려줘', inst: '소상공인시장진흥공단', doc: /복무규정/, nums: ['20일'], topic: '배우자' },
+  { id: 'A1', msg: '창업진흥원 취업규칙의 배우자 출산휴가를 남여고용평등법 개정에 맞게 고쳐야해', inst: '창업진흥원', doc: /^취업규칙$/, op: 'insert', sibling: true, topic: '배우자' , related: /휴가|출산/ },
+  { id: 'A2', msg: '창업진흥원 복무규정 배우자 출산휴가를 남녀고용평등법 개정에 맞게 고쳐줘', inst: '창업진흥원', doc: /^복무규정$/, refs: ['제44조의2'], topic: '배우자' , related: /휴가|출산/ },
+  { id: 'A3', msg: '창업진흥원 복무규정에서 배우자 출산휴가를 출산예정일 50일 전부터 쓸 수 있게 해줘', inst: '창업진흥원', doc: /^복무규정$/, refs: ['제44조의2'], nums: ['50일'], topic: '배우자' , related: /휴가|출산/ },
+  { id: 'A4', msg: '소상공인시장진흥공단 복무규정의 배우자 출산휴가를 20일로 늘려줘', inst: '소상공인시장진흥공단', doc: /복무규정/, nums: ['20일'], topic: '배우자' , related: /휴가|출산/ },
   { id: 'A5', msg: '창업진흥원 여비규정에서 국내출장 숙박비 상한을 올려야 해. 어떻게 고치면 될까', inst: '창업진흥원', doc: /여비/, topic: '숙박' },
-  { id: 'A6', msg: '한국전력공사 취업규칙의 배우자 출산휴가를 20일로 늘려줘', inst: '한국전력공사', doc: /취업규칙/, topic: '배우자' },
-  { id: 'G1', msg: '고용노동부 당직 및 비상근무규칙에서 당직 근무 다음 날 휴무를 보장하도록 고쳐줘', profile: { name: '고용노동부', type: 'central-ministry' }, doc: /당직/, topic: '휴무' },
-  { id: 'L1', msg: '수원시 공무원 당직 및 비상근무 규칙에서 당직 휴무일 지정 기한을 10일 이내로 줄여줘', profile: { name: '경기도 수원시', type: 'local-gov' }, doc: /당직/, nums: ['10일'], topic: '휴무' },
-  { id: 'L2', msg: '서울특별시 공무원 복무 조례에 배우자 출산휴가 규정이 법 개정에 맞는지 보고 고쳐줘', profile: { name: '서울특별시', type: 'local-gov' }, doc: /복무/, topic: '배우자' },
+  { id: 'A6', msg: '한국전력공사 취업규칙의 배우자 출산휴가를 20일로 늘려줘', inst: '한국전력공사', doc: /취업규칙/, topic: '배우자' , related: /휴가|출산/ },
+  { id: 'G1', msg: '고용노동부 당직 및 비상근무규칙에서 당직 근무 다음 날 휴무를 보장하도록 고쳐줘', profile: { name: '고용노동부', type: 'central-ministry' , related: /휴무|휴식/ }, doc: /당직/, topic: '휴무' },
+  { id: 'L1', msg: '수원시 공무원 당직 및 비상근무 규칙에서 당직 휴무일 지정 기한을 10일 이내로 줄여줘', profile: { name: '경기도 수원시', type: 'local-gov' , related: /휴무|휴식/ }, doc: /당직/, nums: ['10일'], topic: '휴무' },
+  { id: 'L2', msg: '서울특별시 공무원 복무 조례에 배우자 출산휴가 규정이 법 개정에 맞는지 보고 고쳐줘', profile: { name: '서울특별시', type: 'local-gov' , related: /휴가|출산/ }, doc: /복무/, topic: '배우자' },
+  { id: 'E1', msg: '창업진흥원 재택근무 운영지침을 새로 만들어줘. 신청 절차, 근무 장소, 보안 준수를 넣어줘', kind: 'enact', minArticles: 5 },
+  { id: 'E2', msg: '수원시 공무원 재택근무 운영 규칙을 새로 만들어줘', profile: { name: '경기도 수원시', type: 'local-gov' }, kind: 'enact', minArticles: 5 },
 ];
 const sel = only ? CASES.filter((c) => only.split(',').includes(c.id)) : CASES;
 const reps = Math.max(1, +repArg || 2);
@@ -35,6 +37,14 @@ const DELEG = /(대통령령|총리령|[가-힣]{2,10}부령)으로\s*정한다/
 function judge(c, j) {
   const f = [], r = j.result || {};
   if (j.status !== 'done') return [`실행 실패: ${j.error?.code} ${j.error?.message || ''}`];
+  // 제정: 조문 수·법률 문장 흔적·위임 문장만 본다
+  if (c.kind === 'enact') {
+    const arts = r.articles || [];
+    if (r.kind !== '제정') f.push(`제정안 없음(${r.kind || '-'})`);
+    if (arts.length < (c.minArticles || 5)) f.push(`조문 ${arts.length}개`);
+    for (const a of arts) { const t = String(a.new || a.text || ''); if (DELEG.test(t)) f.push(`${a.ref}: 법령 위임 문장`); if (t.includes('사업주')) f.push(`${a.ref}: 「사업주」`); }
+    return f;
+  }
   const doc = r.doc || {};
   if (c.inst && doc.inst !== c.inst) f.push(`기관 다름: ${doc.inst}`);
   if (c.doc && !c.doc.test(String(doc.title || ''))) f.push(`규정 다름: ${doc.title}`);
@@ -47,7 +57,8 @@ function judge(c, j) {
     const nw = String(x.new || ''), old = String(x.old || '');
     if (DELEG.test(nw) && !DELEG.test(old)) f.push(`${x.ref}: 법령 위임 문장`);
     if (nw.includes('사업주') && !old.includes('사업주')) f.push(`${x.ref}: 「사업주」를 새로 씀`);
-    if (c.topic && x.op === 'amend' && nw.includes(c.topic) && !old.includes(c.topic) && !String(x.title || '').includes(c.topic)) f.push(`${x.ref}(${x.title}): 관계없는 조문에 끼워 넣음`);
+    // 관계없는 조문에 끼워 넣음: 주제 낱말을 새로 넣었는데 조 제목이 주제와 무관(case.related 로 관련 제목을 정함)
+    if (c.topic && x.op === 'amend' && nw.includes(c.topic) && !old.includes(c.topic) && !String(x.title || '').includes(c.topic) && !(c.related && c.related.test(String(x.title || '')))) f.push(`${x.ref}(${x.title}): 관계없는 조문에 끼워 넣음`);
   }
   for (const n of c.nums || []) if (!ch.some((x) => String(x.new || '').includes(n))) f.push(`수치 ${n} 없음`);
   const reason = (r.docset?.sections || []).find((s) => s.id === 'reason')?.body || '';
