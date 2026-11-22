@@ -19,7 +19,7 @@ import { goTab } from '@/App'
 import { useApp } from '@/lib/app-state'
 import { Badge } from '@/components/ui/badge'
 
-const EXAMPLES = ['대구경북첨단의료산업진흥재단 취업규칙의 배우자 출산휴가를 남녀고용평등법 개정에 맞게 20일로 고쳐야 해', '우리 공단에 직장 내 괴롭힘 예방 및 처리 지침을 새로 만들어야 해', '다른 기관들은 출장 복명서 제출 기한을 어떻게 정했는지 비교해 줘']
+const EXAMPLES = ['대구경북첨단의료산업진흥재단 취업규칙의 배우자 출산휴가를 남녀고용평등법 개정에 맞게 20일로 고쳐야 해', '우리 기관에 직장 내 괴롭힘 예방 및 처리 지침을 새로 만들어야 해', '다른 기관들은 출장 복명서 제출 기한을 어떻게 정했는지 비교해 줘']
 const TOOL_KO: Record<string, string> = { search_regulations: '규정 찾기', load_document: '원문 불러오기', get_article: '조문 보기', search_law: '법령 찾기', find_citations: '인용 조문 찾기', compare_versions: '이전 판본과 비교', find_similar: '유사 규정 조사', draft_amendment: '개정안 작성', draft_enactment: '제정안 작성', analyze_impact: '법 개정 영향 분석', build_comparison_table: '비교표 만들기', check_regulation: '규정 점검', procedure_next: '절차 안내', ask_user: '담당자에게 확인', bulk_amend: '일괄 개정', review_opinions: '의견 검토', scheduled_radar: '시행예정 법령 확인', finish: '마무리' }
 export default function AgentView() {
   const [msg, setMsg] = useState('')

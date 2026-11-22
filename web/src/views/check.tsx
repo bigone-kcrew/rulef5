@@ -30,11 +30,14 @@ function CheckView({ onReset }: { onReset: () => void }) {
   const job = useJob('check')
   const r = job.job?.status === 'done' ? job.job.result : null
   const [only, setOnly] = useState('all')
-  const shown = (r?.findings || []).filter((f: any) => only === 'all' || f.type === only)
+  // AI가 「특례·예외일 수 있음」으로 본 수치 충돌은 기본으로 접어 둔다(눌러서 보기)
+  const [showOk, setShowOk] = useState(false)
+  const okN = (r?.findings || []).filter((f: any) => f.ai_ok).length
+  const shown = (r?.findings || []).filter((f: any) => (only === 'all' || f.type === only) && (showOk || !f.ai_ok))
   // 다음 단계: 용어 혼용은 F9 일괄 개정(찾을 말·바꿀 말·규정을 채워서), 나머지는 F2 개정(규정·조문·고칠 내용을 채워서)
   const next = (f: any) => f.type === 'term' && f.fix
     ? goTab('bulk', { find: f.fix.find, rep: f.fix.rep, docs: [{ doc_id: f.doc_id, title: f.doc_title }] })
-    : goTab('amend', { doc_id: f.doc_id, refs: String(f.ref || '').split(',').map((x) => x.trim()).filter((x) => /^제\d/.test(x)).slice(0, 5), intent: `규정 점검에서 찾은 문제를 바로잡는다: ${f.message}`.slice(0, 600) })
+    : goTab('amend', { doc_id: f.doc_id, refs: String(f.ref || '').split(',').map((x) => x.trim()).filter((x) => /^제\d/.test(x)).slice(0, 5), intent: `규정 점검에서 찾은 문제를 바로잡는다: ${String(f.message).replace(/\s*AI 판단:.*$/, '')}`.slice(0, 600) })
   return (
     <div className="flex flex-col gap-4">
       <Card>
@@ -47,7 +50,7 @@ function CheckView({ onReset }: { onReset: () => void }) {
               {gov && <Input className="sm:w-64" value={kw} onChange={(e) => setKw(e.target.value)} maxLength={30} placeholder="제명 낱말로 좁히기(예: 복무, 문서) — 선택" />}
             </div>
           )}
-          <div className="flex justify-end"><Button size="lg" disabled={job.busy || (mode === 'docs' ? !picked?.uploads.length : !inst.trim())} onClick={() => job.start('check', mode === 'docs' ? { doc_ids: picked!.uploads } : { inst: inst.trim(), org_type: profile.type, keyword: kw.trim() || undefined })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}점검 시작{mode === 'docs' && picked?.uploads.length ? ` (${picked.uploads.length}개)` : ''}</Button></div>
+          <div className="flex flex-wrap items-center justify-end gap-3">{(mode === 'docs' ? !picked?.uploads.length : !inst.trim()) && <span className="text-sm text-muted-foreground">{mode === 'docs' ? '점검할 규정을 고르거나 올리세요' : '기관명을 입력하세요'}</span>}<Button size="lg" disabled={job.busy || (mode === 'docs' ? !picked?.uploads.length : !inst.trim())} onClick={() => job.start('check', mode === 'docs' ? { doc_ids: picked!.uploads } : { inst: inst.trim(), org_type: profile.type, keyword: kw.trim() || undefined })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}점검 시작{mode === 'docs' && picked?.uploads.length ? ` (${picked.uploads.length}개)` : ''}</Button></div>
         </CardContent>
       </Card>
       <JobTimeline job={job.job} error={job.error} startedAt={job.startedAt} onAnswer={job.answer} onRetry={job.canRetry ? job.retry : undefined} title="규정 점검" />
@@ -59,8 +62,9 @@ function CheckView({ onReset }: { onReset: () => void }) {
             {r.findings.length > 0 && <ToggleGroup value={[only]} onValueChange={(v: string[]) => v[0] && setOnly(v[0])} variant="outline" className="flex-wrap"><ToggleGroupItem value="all">전체 {r.findings.length}</ToggleGroupItem>{Object.entries(TYPE).filter(([k]) => r.findings.some((f: any) => f.type === k)).map(([k, l]) => <ToggleGroupItem key={k} value={k}>{l} {r.findings.filter((f: any) => f.type === k).length}</ToggleGroupItem>)}</ToggleGroup>}
             <Table>
               <TableHeader><TableRow><TableHead className="w-28">유형</TableHead><TableHead className="w-48">규정·조문</TableHead><TableHead>내용</TableHead><TableHead className="w-32" /></TableRow></TableHeader>
-              <TableBody>{shown.map((f: any, i: number) => <TableRow key={i}><TableCell className="align-top"><div className="flex flex-col gap-1"><Badge variant={f.severity === 'high' ? 'default' : 'outline'}>{TYPE[f.type]}</Badge><span className="text-xs text-muted-foreground">중요도 {SEV[f.severity]}</span></div></TableCell><TableCell className="whitespace-normal align-top"><div className="font-medium">{f.doc_title}</div><div className="text-xs text-muted-foreground"><DocLink docId={f.doc_id} refName={String(f.ref || '').split(',')[0]}>{f.ref}</DocLink></div></TableCell><TableCell className="whitespace-normal align-top text-sm"><div>{f.message}</div>{f.evidence && <div className="mt-1 text-xs text-muted-foreground">{f.evidence}</div>}</TableCell><TableCell className="align-top">{f.ref !== '-' && <Button size="xs" variant="outline" onClick={() => next(f)}>{f.type === 'term' && f.fix ? '일괄 개정으로 통일' : '개정 준비'}<ArrowRightIcon data-icon="inline-end" /></Button>}</TableCell></TableRow>)}</TableBody>
+              <TableBody>{shown.map((f: any, i: number) => <TableRow key={i}><TableCell className="align-top"><div className="flex flex-col gap-1"><Badge variant={f.severity === 'high' ? 'default' : 'outline'}>{TYPE[f.type]}</Badge><span className="text-xs text-muted-foreground">중요도 {SEV[f.severity]}</span></div></TableCell><TableCell className="whitespace-normal align-top"><div className="font-medium">{f.doc_title}</div><div className="text-xs text-muted-foreground"><DocLink docId={f.doc_id} refName={String(f.ref || '').split(',')[0]}>{f.ref}</DocLink></div></TableCell><TableCell className="whitespace-normal align-top text-sm"><div>{f.message}</div>{f.evidence && <div className="mt-1 text-xs text-muted-foreground">{f.evidence}</div>}</TableCell><TableCell className="align-top">{f.ref !== '-' && !f.ai_ok && <Button size="xs" variant="outline" onClick={() => next(f)}>{f.type === 'term' && f.fix ? '일괄 개정으로 통일' : '개정 준비'}<ArrowRightIcon data-icon="inline-end" /></Button>}</TableCell></TableRow>)}</TableBody>
             </Table>
+            {okN > 0 && <Button variant="ghost" size="sm" className="self-start text-muted-foreground" onClick={() => setShowOk(!showOk)}>{showOk ? 'AI가 문제없다고 본 항목 숨기기' : `AI가 특례·예외로 본 수치 충돌 ${okN}건 보기`}</Button>}
             {!r.findings.length && <p className="text-sm text-muted-foreground">점검 규칙에 걸린 항목이 없습니다(규칙 범위 안에서).</p>}
             <div><Button variant="outline" onClick={() => download('규정점검_결과.csv', tableCsv(r.findings.map((f: any) => ({ ...f, type: TYPE[f.type], severity: SEV[f.severity] })), [['type', '유형'], ['severity', '중요도'], ['doc_title', '규정'], ['ref', '조문'], ['message', '내용'], ['evidence', '원문']]), 'text/csv')}><DownloadIcon data-icon="inline-start" />CSV</Button></div>
           </CardContent>

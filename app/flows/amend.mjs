@@ -29,6 +29,13 @@ export function adverseChanges(changes) {
           if (BENEFIT.test(ctx) && !BURDEN.test(ctx) && y.v < x.v) reasons.push(`${x.v}${x.u} → ${y.v}${y.u}(혜택 감소)`);
           if (BURDEN.test(ctx) && y.v > x.v) reasons.push(`${x.v}${x.u} → ${y.v}${y.u}(부담 증가)`); }
       }
+      // 유급이던 혜택에 「무급」이 새로 생기면(일부를 무급으로 돌림) 불리한 변경일 수 있다
+      if (BENEFIT.test(ctx) && /유급/.test(c.old || '') && /무급/.test(c.new || '') && !/무급/.test(c.old || '')) reasons.push('유급 → 일부 무급 전환');
+      // 전부 유급이던 것이 「최초 N일은 유급」처럼 일부만 유급으로 바뀌면 혜택 축소일 수 있다
+      if (BENEFIT.test(ctx) && /유급/.test(c.old || '') && !/최초\s*\d+\s*일/.test(c.old || '') && /최초\s*\d+\s*일[^.]{0,8}유급/.test(c.new || '')) reasons.push('전부 유급 → 일부만 유급');
+      // 호·목(1. 가. …)이 줄면 대상·기간을 정한 세부 기준이 빠진 것일 수 있다
+      const items = (t) => String(t || '').split('\n').filter((l) => /^\s*(\d+\.|[가-하]\.)\s/.test(l)).length;
+      if (BENEFIT.test(ctx) && items(c.new) < items(c.old)) reasons.push(`세부 호·목 ${items(c.old)}개 → ${items(c.new)}개`);
       if (/수 있다/.test(c.old) && /(여야|해야|아야|어야) 한다/.test(c.new) && !/수 있다/.test(c.new)) reasons.push('재량 → 의무');
     }
     if (reasons.length) out.push({ ref: c.ref, reasons });
@@ -106,7 +113,7 @@ export async function runAmend(ctx) {
   const byRef = new Map(main.map((a) => [a.ref, a]));
 
   // 의도의 주제(예: 배우자 출산휴가)를 정한 조문이 이 규정에 아예 없으면 기존 조문에 끼워 넣지 말고 새 조문으로 둔다
-  let absentTopic = null;
+  let absentTopic = null, pickTopic = '';
   // 규정에 그 주제 조문이 있는지(코드 판단): 조 제목에 주제 낱말이 있거나, 한 조문 본문에 주제 낱말이 모두 있으면 있는 것으로 본다
   const hasTopic = (topic) => { const ws = topic.split(/\s+/).filter((w) => w.length >= 2); if (!ws.length) return true; return doc.articles.some((a) => ws.some((w) => String(a.title || '').includes(w)) || ws.every((w) => String(a.body || '').includes(w))); };
   const pick = await ctx.step('대상 조문 찾기', async (s) => {
@@ -127,6 +134,7 @@ export async function runAmend(ctx) {
         const o = await llm.chatJson(pickArticlesPrompt(doc, intent, pool.map((a) => ({ ...a, body: snip(a) }))), (o) => { o.refs = [...new Set((Array.isArray(o.refs) ? o.refs : []).map((r) => normRef(r).ref))].filter((r) => byRef.has(r)); if (!o.refs.length) throw new Error('refs 는 후보 조문 번호여야 합니다.'); return o; }, { maxTokens: 2000 });
         suggested = o.refs.slice(0, 4); why = o.why || 'AI 추천';
         const topic = typeof o.topic === 'string' ? o.topic.replace(/[「」"']/g, '').trim().slice(0, 30) : '';
+        pickTopic = topic;
         // 모델도 「없다」고 하고(exists=false) 코드로도 어느 조문에도 주제 낱말이 절반 이상 함께 나오지 않을 때만
         if (topic.length >= 2 && !hasTopic(topic)) { absentTopic = topic; why = `이 규정에는 「${topic}」 조문이 없어 새 조문으로 둡니다(아래는 새 조문을 둘 자리 후보) — ${why}`; }
       } catch (e) { ctx.log(`AI 조문 추천 실패(${e.code || 'error'}) — 핵심어 일치 결과를 씁니다.`); ctx.metric?.('picker_fallback', e.code || 'error'); }
@@ -222,7 +230,17 @@ export async function runAmend(ctx) {
     else if (opts.length) {
       const preset = pick.why !== '핵심어 일치';
       const spec = llm && preset ? makeDraft(refs.map((r) => byRef.get(r)), evidence).catch(() => null) : null;
-      const prompt = absentTopic ? `이 규정에는 「${absentTopic}」 조문이 없습니다. 새 조문을 둘 자리(바로 앞 조문)와 참고할 근거를 확인해 주세요.` : !preset ? 'AI 추천을 받지 못해 낱말이 맞는 조문을 보여 드립니다. 개정할 조문과 참고할 근거를 골라 주세요.' : '개정할 조문과 참고할 근거를 확인해 주세요. 추천대로면 바로 확인을 누르세요(그동안 초안을 미리 쓰고 있습니다).';
+      // 추천 조문 제목에 주제 낱말이 없으면, 같은 기관 다른 규정에 그 주제 조문이 있는지 확인 전에 알려 준다(예: 복무규정이 아니라 인사규정)
+      let elsewhere = '';
+      const tw = (pickTopic || absentTopic || '').split(/\s+/).filter((w) => w.length >= 2 && !/^(휴가|규정|운영|관리|기준|절차|사항|지원|기한|신청)$/.test(w));
+      if (tw.length && !pick.fixed && doc.inst && /^bylaws:/.test(doc.doc_id) && !refs.some((r) => tw.some((w) => String(byRef.get(r)?.title || '').includes(w)))) {
+        try {
+          const r0 = await sources.searchRegs({ keyword: tw.join(' '), corpus: 'bylaws', inst: doc.inst, hybrid: true, limit: 8 });
+          const x = r0.rows.find((y) => y.doc_id !== doc.doc_id && y.art_ref && tw.some((w) => String(y.art_title || '').includes(w)));
+          if (x) elsewhere = ` 참고: 이 규정의 추천 조문 제목에는 「${tw.join(' ')}」이(가) 없고, 같은 기관 「${x.doc_title}」 ${x.art_ref}(${x.art_title})에 있습니다. 그 규정을 고쳐야 하면 「입력 고치기」에서 규정을 바꾸세요.`;
+        } catch { /* 참고 안내는 빠져도 된다 */ }
+      }
+      const prompt = (absentTopic ? `이 규정에는 「${absentTopic}」 조문이 없습니다. 새 조문을 둘 자리(바로 앞 조문)와 참고할 근거를 확인해 주세요.` : !preset ? 'AI 추천을 받지 못해 낱말이 맞는 조문을 보여 드립니다. 개정할 조문과 참고할 근거를 골라 주세요.' : '개정할 조문과 참고할 근거를 확인해 주세요. 추천대로면 바로 확인을 누르세요(그동안 초안을 미리 쓰고 있습니다).') + elsewhere;
       const picked = [].concat(await ctx.gate({ id: 'pick_targets', prompt, multi: true, options: opts }) || []).map(String);
       const newRefs = pick.fixed ? refs : picked.filter((v) => v.startsWith('A:')).map((v) => v.slice(2)).filter((r) => byRef.has(r)).slice(0, 5);
       if (!newRefs.length) throw fail('no_target', '개정할 조문이 선택되지 않았습니다.');
@@ -256,7 +274,7 @@ export async function runAmend(ctx) {
     const key = (c, i) => (c.op === 'insert' ? `신설${i + 1}` : c.ref);
     const items = live.map((c, i) => ({ ref: key(c, i), title: c.op === 'insert' ? c.title || '' : byRef.get(c.ref)?.title || '', old: c.op === 'insert' ? '' : byRef.get(c.ref)?.body || '', text: c.new_text }));
     const cited = evidence.filter((e) => live.some((c) => (c.basis_ids || []).includes(e.id)));
-    const r = await selfReview({ llm, sources, items, intent, evidence: cited.length ? cited : evidence.slice(0, 4), docText: main.map((a) => `${a.ref}(${a.title}) ${a.body}`).join('\n'), profile: input.profile || {}, kind: '개정' });
+    const r = await selfReview({ llm, sources, items, intent, evidence: [...new Set([...(cited.length ? cited : evidence.slice(0, 4)), ...evidence.filter((e) => e.upcoming)])], docText: main.map((a) => `${a.ref}(${a.title}) ${a.body}`).join('\n'), profile: input.profile || {}, kind: '개정' });
     live.forEach((c, i) => { const t = r.fixed.get(key(c, i)); if (t) c.new_text = t; });
     const label = (ref) => { const i = live.findIndex((c, k) => key(c, k) === ref); return i >= 0 && live[i].op === 'insert' ? `신설 조문(${live[i].title || ''})` : ref; };
     s.note(`코드가 찾은 문제 ${r.found.length}건 · 모델 검토로 고친 조문 ${r.applied.length}개${r.remaining.length ? ` · 남은 문제 ${r.remaining.length}건(체크리스트)` : ''}`);
@@ -281,7 +299,7 @@ export async function runAmend(ctx) {
     if (doc.inst && (!input.profile?.name || /^예시 /.test(input.profile.name))) input.profile = { ...(input.profile || {}), name: doc.inst };
     let ins = 0;
     const changes = draft.changes.map((c) => {
-      if (c.op === 'insert') { const it = fix.inserted[ins++]; const ref = it?.ref; return { op: 'insert', ref, after: it?.op?.after || c.after, title: c.title || '', old: '', new: c.new_text.replace(/\n{2,}/g, '\n').trim(), reason: c.reason, basis_ids: c.basis_ids }; }
+      if (c.op === 'insert') { const it = fix.inserted[ins++]; const ref = it?.ref; return { op: 'insert', ref, after: it?.after || it?.op?.after || c.after, asked_after: c.after, title: c.title || '', old: '', new: c.new_text.replace(/\n{2,}/g, '\n').trim(), reason: c.reason, basis_ids: c.basis_ids }; }
       const a = byRef.get(c.ref);
       return { op: c.op, ref: c.ref, title: a.title || c.title, old: a.body, new: c.op === 'delete' ? '' : c.new_text.replace(/\n{2,}/g, '\n').replace(/^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*/, '').trim(), reason: c.reason, basis_ids: c.basis_ids };
     });
@@ -290,6 +308,8 @@ export async function runAmend(ctx) {
     // 신설 조문이 하나뿐이면, 이유서·주요 내용에 쓴 원문에 없는 조 번호(모델 추측)를 코드가 매긴 번호로 맞춘다
     const ins1 = changes.filter((c) => c.op === 'insert' && c.ref);
     if (ins1.length === 1) { const known = new Set([...byRef.keys(), ...changes.map((c) => c.ref)]); const f0 = fixRef; fixRef = (t) => typeof t !== 'string' ? t : f0(t).replace(/제\s*\d+\s*조(?:의\s*\d+)?/g, (m) => (known.has(m.replace(/\s+/g, '')) ? m : ins1[0].ref)).replace(/(제\s*\d+\s*조(?:의\s*\d+)?)(?!\s*(?:뒤|다음|앞|와|과|사이))(?=[^.\n]{0,60}신설)/g, (m) => (changes.some((c) => c.ref === m.replace(/\s+/g, '')) ? m : ins1[0].ref)); }
+    // 모델이 쓴 「제45조의4 뒤에 신설」 같은 위치 문구를 실제 자리(가지 번호 순서에 맞춘 자리)로 맞춘다
+    { const f1 = fixRef; const moved = changes.filter((c) => c.op === 'insert' && c.asked_after && c.after && c.asked_after !== c.after); if (moved.length) fixRef = (t) => typeof t !== 'string' ? t : moved.reduce((acc, c) => acc.replace(new RegExp(`${c.asked_after.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/(\d+)/g, '\\s*$1\\s*')}(?!\\d|의)\\s*(뒤|다음)에`, 'g'), `${c.after} 다음에`), f1(t)); }
     draft.reason_summary = fixRef(draft.reason_summary); draft.main_points = (draft.main_points || []).map(fixRef); draft.checks = (draft.checks || []).map(fixRef);
     if (draft.addenda && typeof draft.addenda === 'object') for (const k of Object.keys(draft.addenda)) draft.addenda[k] = fixRef(draft.addenda[k]);
     const sameDocCorr = fix.corr.filter((c) => c.doc_id === doc.doc_id && !changes.some((x) => x.ref === c.ref));
@@ -299,6 +319,10 @@ export async function runAmend(ctx) {
     const shortWarn = changes.filter((c) => c.op === 'amend' && c.old.length >= 400 && c.new.length < c.old.length * 0.6).map((c) => `${c.ref}: 수정안이 원문보다 크게 짧습니다. 항·호 누락 여부를 대조하세요.`);
     const paraLoss = changes.filter((c) => c.op === 'amend' && splitParagraphs(c.new).length < splitParagraphs(c.old).length).map((c) => `${c.ref}: 항 수가 줄었습니다(${splitParagraphs(c.old).length}→${splitParagraphs(c.new).length}). 의도한 삭제인지 확인하세요.`);
     const adverse = adverseChanges(changes);
+    // 근거 없는 수치: 수정안의 「N일·N개월·N회…」가 현행 조문·개정 의도·근거 어디에도 없으면 AI가 정한 값으로 알린다
+    const numTok = (t) => [...String(t || '').matchAll(/(\d+(?:\.\d+)?)\s*(일|개월|년|시간|회|퍼센트|%|만원|원|명|세)(?![가-힣]*조)/g)].map((m) => `${m[1]}${m[2]}`);
+    const known = new Set([...numTok(intent), ...evidence.flatMap((e) => numTok(e.text)), ...changes.flatMap((c) => numTok(c.old)), ...main.flatMap((a) => numTok(a.body))]);
+    const invented = changes.filter((c) => c.op !== 'delete').map((c) => [c, [...new Set(numTok(c.new).filter((x) => !known.has(x)))]]).filter(([, xs]) => xs.length).map(([c, xs]) => `${c.ref}: ${xs.join(', ')} — 개정 의도·현행 규정·근거에서 찾지 못한 값입니다(AI가 정함). 맞는 값인지 정하세요.`);
     // 수정안이 현행과 글자까지 같으면(요청이 이미 반영된 경우 등) 「바꿀 곳 없음」으로 알린다 — 빈 초안을 완료처럼 보이지 않게
     const flatW = (t) => String(t || '').replace(/\s+/g, '');
     const same = changes.filter((c) => c.op === 'amend' && flatW(c.new) === flatW(c.old));
@@ -348,6 +372,9 @@ export async function runAmend(ctx) {
       ...(draft.dropped || []).map((x) => `모델이 낸 변경 중 형식이 맞지 않아 뺀 것 — ${x}`),
       ...(ca?.rows || []).map((x) => `${x.ref}: 단체협약(${x.ca_values.join(', ')})과 값이 다릅니다 — 근로기준법 제96조 확인`),
       ...(ca?.errors.length ? ['단체협약 조회 실패 — 협약과의 정합성을 확인하지 못했습니다.'] : []),
+      ...invented,
+      // 개정 이유서·주요 내용에 적힌 값이 수정안 본문에 없으면(문서끼리 어긋남) 알린다
+      ...(() => { const body = changes.map((c) => c.new).join(' '); const said = [...new Set([draft.reason_summary, ...(draft.main_points || [])].flatMap((t) => numTok(t)))].filter((x) => !numTok(body).includes(x) && !numTok(changes.map((c) => c.old).join(' ')).includes(x)); return said.length ? [`개정 이유서·주요 내용에 적힌 값(${said.join(', ')})이 수정안 본문에 없습니다. 본문과 이유서 중 어느 쪽이 맞는지 맞추세요.`] : []; })(),
       ...adverse.map((a) => `${a.ref}: 근로자에게 불리한 변경 가능성(${a.reasons.join(', ')}) — 근로기준법 제94조 동의 절차 확인`),
       ...shortWarn, ...paraLoss,
       doc.edition?.warning ? `대상 규정 판본: ${doc.edition.warning}` : null,

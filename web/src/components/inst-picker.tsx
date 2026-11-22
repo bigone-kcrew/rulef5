@@ -8,12 +8,12 @@ export type Inst = { name: string; type: string; ministry: string; sub?: string;
 // lazy: 칠 때마다 반영하지 않고, 목록에서 고르거나 입력을 마칠 때(포커스 이동·Enter)만 반영한다. Esc 는 원래 값으로 되돌린다
 type Props = { value: string; onPick: (i: Inst | null, text: string) => void; placeholder?: string; id?: string; type?: Profile['type']; lazy?: boolean }
 export function InstPicker({ value, onPick, placeholder = '기관명을 입력하세요', id, type = 'public-institution', lazy = false }: Props) {
-  const [q, setQ] = useState(value); const [items, setItems] = useState<Inst[]>([]); const [open, setOpen] = useState(false); const [at, setAt] = useState(-1)
+  const [q, setQ] = useState(value); const [items, setItems] = useState<Inst[]>([]); const [open, setOpen] = useState(false); const [at, setAt] = useState(-1); const [none, setNone] = useState(false)
   useEffect(() => { setQ(value) }, [value])
   useEffect(() => {
     if (!open) { setItems([]); return }
     let live = true
-    const t = setTimeout(() => { api<{ items: Inst[] }>(`/api/orgs?type=${type}&q=${encodeURIComponent(q.trim())}`).then((r) => { if (live) { setItems(r.items.map((x) => ({ ...x, type: x.type || '', ministry: x.ministry || '' }))); setAt(-1) } }).catch(() => live && setItems([])) }, 150)
+    const t = setTimeout(() => { api<{ items: Inst[] }>(`/api/orgs?type=${type}&q=${encodeURIComponent(q.trim())}`).then((r) => { if (live) { setItems(r.items.map((x) => ({ ...x, type: x.type || '', ministry: x.ministry || '' }))); setAt(-1); setNone(!r.items.length && q.trim().length >= 2) } }).catch(() => live && setItems([])) }, 150)
     return () => { live = false; clearTimeout(t) }
   }, [q, open, type])
   // 목록은 카드(overflow-hidden)에 잘리지 않게 화면 위에 띄운다(body 에 붙이고 입력칸 바로 아래에 고정).
@@ -45,6 +45,7 @@ export function InstPicker({ value, onPick, placeholder = '기관명을 입력�
           else if (e.key === 'Enter' && at >= 0) { e.preventDefault(); choose(items[at]) }
           else if (e.key === 'Escape') setOpen(false)
         }} />
+      {open && none && !items.length && <p className="mt-1 text-xs text-muted-foreground">목록에 없는 이름입니다. 오타가 아니면 입력한 이름 그대로 씁니다.</p>}
       {open && items.length > 0 && (() => {
         const list = (
           <ul role="listbox" style={pos ? { position: 'fixed', left: pos.left, width: pos.width, ...(pos.up ? { bottom: window.innerHeight - pos.top + 4 } : { top: pos.top + 4 }) } : undefined}

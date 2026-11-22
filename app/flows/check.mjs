@@ -111,7 +111,7 @@ export async function runCheck(ctx) {
   const findings = await ctx.step('인용·용어·수치 규칙 점검', async (s) => {
     const f = checkDocs(docs, { wholeInstitution: !!input.inst, terms: input.profile?.terms || null, orgType: ['local-gov', 'central-ministry'].includes(input.org_type) ? input.org_type : (input.profile?.type || null), org: input.inst || (/^예시 /.test(input.profile?.name || '') ? null : input.profile?.name) || null });
     const c = (t) => f.filter((x) => x.type === t).length;
-    s.note(`인용 오류 ${c('broken_ref')} · 용어 혼용 ${c('term')} · 수치 충돌 후보 ${c('conflict')} · 규정 누락 확인 ${c('missing_reg')}`);
+    s.note(`인용 오류 ${c('broken_ref')} · 용어 혼용 ${c('term')} · 수치 충돌 후보 ${c('conflict')} · 규정 누락 후보 ${c('missing_reg')}${c('missing_reg') && input.inst ? '(다음 단계에서 실제로 없는지 확인)' : ''}`);
     return f;
   });
   // 묶음에 없는 규정 인용은 ALIO에서 그 기관 규정을 검색해 실제로 없을 때만 남긴다
@@ -146,7 +146,7 @@ export async function runCheck(ctx) {
     await ctx.step('충돌 후보 AI 확인', async (s) => {
       try {
         const o = await llm.chatJson([{ role: 'system', content: SYS_BASE }, { role: 'user', content: JSON.stringify({ 과제: '같은 규정 안에서 서로 다른 값을 정한 조문 쌍이 실제 충돌인지, 적용 대상이 다른 특례·예외인지 판단한다. 직원·임직원·종업원·근로자·출장자처럼 같은 사람들을 다른 말로 부른 것(용어 혼용)은 적용 대상이 다른 것으로 보지 않는다. 한쪽에 「다만」「~의 경우에는」처럼 대상·상황을 좁히는 문구가 있을 때만 특례로 본다.', 후보: conflicts.map((c, i) => ({ id: String(i), 내용: c.evidence })), 출력형식: { results: [{ id: '0', conflict: true, reason: '한 문장' }] } }) }], (o) => { if (!Array.isArray(o.results)) throw new Error('results 없음'); return o; }, { maxTokens: 2500 });
-        for (const r of o.results) { const c = conflicts[+r.id]; if (c) { c.severity = r.conflict ? 'mid' : 'check'; c.message += ` AI 판단: ${r.conflict ? '충돌 가능성 높음' : '특례·예외일 수 있음'} — ${r.reason || ''}`; } }
+        for (const r of o.results) { const c = conflicts[+r.id]; if (c) { c.severity = r.conflict ? 'mid' : 'check'; if (!r.conflict) c.ai_ok = true; c.message += ` AI 판단: ${r.conflict ? '충돌 가능성 높음' : '특례·예외일 수 있음'} — ${r.reason || ''}`; } }
         s.note(`${o.results.length}건 판단`);
       } catch (e) { s.note(`AI 확인 실패(${e.code || 'error'}) — 규칙 결과만 표시`); }
     });

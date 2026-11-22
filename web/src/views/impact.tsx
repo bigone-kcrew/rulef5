@@ -156,7 +156,7 @@ function ImpactView({ onReset }: { onReset: () => void }) {
                   <div key={g.doc_id} className="overflow-hidden rounded-lg border">
                     <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-3 py-2">
                       <span className="min-w-0 flex-1 text-sm font-semibold"><DocLink docId={g.doc_id}>{g.inst ? `${g.inst} · ` : ''}{g.title}</DocLink> <span className="font-normal text-muted-foreground">고칠 곳 {g.rows.length}</span></span>
-                      <Button size="sm" onClick={() => prep(g, g.rows)}>개정 준비<ArrowRightIcon data-icon="inline-end" /></Button>
+                      <Button size="sm" onClick={() => prep(g, g.rows)}>{g.rows.length > 1 ? `${g.rows.length}개 조문 모두 개정 준비` : '개정 준비'}<ArrowRightIcon data-icon="inline-end" /></Button>
                     </div>
                     <ul className="divide-y">
                       {g.rows.map((a: any, k: number) => (
@@ -167,7 +167,7 @@ function ImpactView({ onReset }: { onReset: () => void }) {
                             <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{a.excerpt}</div>
                             <div className="mt-0.5 text-xs text-muted-foreground">{a.reason}</div>
                           </div>
-                          {g.rows.length > 1 && <Button size="xs" variant="ghost" className="self-start" onClick={() => prep(g, [a])}>이 조문만</Button>}
+                          {g.rows.length > 1 && <Button size="xs" variant="ghost" className="self-start" onClick={() => prep(g, [a])}>이 조문만 개정 준비</Button>}
                         </li>
                       ))}
                     </ul>

@@ -83,7 +83,9 @@ export async function runEnact(ctx) {
       const names = lawNames(purpose); let cands = [];
       try {
         const r = await sources.rest.search({ keyword: keywords(purpose).slice(0, 3).join(' '), corpus: 'legal', hybrid: true, limit: 6 });
-        cands = r.rows.map((x) => ({ label: `${x.doc_title} ${x.art_ref}(${x.art_title || ''})`, text: clip(x.body, 1500), doc_id: x.doc_id, ref: x.art_ref, edition: editionLabel(x) }));
+        // 조문 번호가 없는 별표·서식, 공공기관인데 공무원 법령(국가·지방공무원)은 위임 근거 후보에서 뺀다. 조각 번호(11/56)는 제목에서 지운다
+        const pub = (profile.type || 'public-institution') === 'public-institution' && !/공무원/.test(`${title} ${purpose}`);
+        cands = r.rows.filter((x) => x.art_ref && !/별표|별지|서식/.test(`${x.art_title || ''}`) && !(pub && /공무원/.test(x.doc_title || ''))).map((x) => ({ label: `${x.doc_title} ${x.art_ref}(${String(x.art_title || '').replace(/\s*\(\d+\/\d+\)\s*/g, '').trim()})`.replace(/\(\)$/, ''), text: clip(x.body, 1500), doc_id: x.doc_id, ref: x.art_ref, edition: editionLabel(x) }));
       } catch { ctx.log('ALIO 법령 검색 실패'); }
       if (names.length && sources.lawGo?.enabled) {
         try { const r = await sources.searchLaw(names[0], { targets: ['law'], limit: 1 }); const hit = r.rows.find((x) => x.source === '법제처'); if (hit) { const doc = await sources.loadDoc(hit.doc_id); const kw = keywords(purpose); doc.articles.map((a) => [scoreArticle(a, kw), a]).filter(([sc]) => sc > 0).sort((a, b) => b[0] - a[0]).slice(0, 4).forEach(([, a]) => cands.push({ label: `${doc.title} ${a.ref}(${a.title})`, text: clip(a.body, 1500), doc_id: doc.doc_id, ref: a.ref, edition: '현행' })); } } catch { ctx.log('법제처 조회 실패'); }

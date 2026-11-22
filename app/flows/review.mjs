@@ -97,6 +97,8 @@ export async function selfReview({ llm, sources, items, intent = '', evidence = 
         의도: clip(intent, 1500), 기관유형: profile.type || null,
         조문안: items.map((x) => ({ ref: x.ref, 제목: x.title, ...(x.old ? { 현행: clip(x.old, 1500) } : {}), 조문안: clip(x.text, 2500) })),
         근거: evidence.slice(0, 6).map((e) => ({ id: e.id, 출처: e.label, 내용: clip(e.text, 400) })),
+        // 근거 조문이 곧 바뀌면 개정 후 조문을 따로 준다 — 법 개정 반영 요청인데 현행 법령 값으로 되돌리지 않게
+        ...(evidence.some((e) => e.upcoming) ? { 곧시행될법령개정: evidence.filter((e) => e.upcoming).map((e) => ({ 근거: e.id, 출처: e.label, 시행일: e.upcoming.eff, 개정후조문: e.upcoming.text })), 법령개정규칙: '의도가 법(령) 개정 반영이면 곧시행될법령개정의 개정후조문이 기준이다. 조문안이 개정후조문 값을 따랐으면 현행 법령 값으로 되돌리지 않는다. 현행 규정이 법령보다 유리한 내용(일수·유급 범위)을 줄였으면 문제로 지적하고 되살린다.' } : {}),
         코드가찾은문제: found.map((x) => x.problem),
         출력형식: { issues: [{ ref: '제N조', problem: '한 문장', fixed_text: '고친 본문 전체(고칠 수 없으면 빈 문자열)' }] },
       }) }], (x) => { if (!Array.isArray(x.issues)) throw new Error('issues 배열이 없습니다.'); return x; }, { maxTokens: 4000 });

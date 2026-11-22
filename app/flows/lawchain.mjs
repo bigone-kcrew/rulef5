@@ -82,17 +82,17 @@ export async function runLawChain(ctx) {
           const flat = body.replace(/\s+/g, ''), refFlat = art.ref;
           const strong = (body.includes(head) && new RegExp(`${refFlat}(?![의\\d])`).test(flat)) || flat.includes(titleCore) || norm(x.art_title).replace(/\s+/g, '').includes(titleCore.slice(0, 4));
           if (seen.has(k) || !strong) continue;
-          seen.add(k); chain.push({ level: '기관 규정', doc_id: x.doc_id, doc_title: `${x.inst_name} ${x.doc_title}`, ref: x.art_ref, title: x.art_title || '', excerpt: clip(x.body, 300), edition: editionLabel(x) });
+          seen.add(k); chain.push({ level: '기관 규정', inst: x.inst_name || null, doc_id: x.doc_id, doc_title: `${x.inst_name} ${x.doc_title}`, ref: x.art_ref, title: x.art_title || '', excerpt: clip(x.body, 300), edition: editionLabel(x) });
         }
       } catch { ctx.log(`기관 규정 검색 실패: ${q}`); chainErrors.push('기관 규정 검색'); }
     }
     if (!govTarget(input.org_type) && sources.mcp?.enabled && /^legal:/.test(law.doc_id) && input.inst) {
       const rel = await sources.related({ doc_id: law.doc_id, art_no: art.no, art_sub: art.sub || undefined, direction: 'incoming', corpus: 'bylaws', inst: input.inst, limit: 30 });
-      for (const x of (rel?.incoming || []).filter((y) => y.art_ref)) { const k = x.doc_id + (x.art_ref || ''); if (!seen.has(k)) { seen.add(k); chain.push({ level: '기관 규정', doc_id: x.doc_id, doc_title: x.doc_title || x.doc_id, ref: x.art_ref, title: x.art_title || '', excerpt: clip(x.body || '', 300), via: 'MCP' }); } }
+      for (const x of (rel?.incoming || []).filter((y) => y.art_ref)) { const k = x.doc_id + (x.art_ref || ''); if (!seen.has(k)) { seen.add(k); chain.push({ level: '기관 규정', inst: input.inst || null, doc_id: x.doc_id, doc_title: x.doc_title || x.doc_id, ref: x.art_ref, title: x.art_title || '', excerpt: clip(x.body || '', 300), via: 'MCP' }); } }
     }
     // 같은 규정의 옛 판본을 뺀 뒤 개수를 적는다(진행 표시와 목록 수가 같게)
     { const kept = new Set(dedupeEditions(chain.filter((c) => c.level === '기관 규정').map((c) => ({ ...c, inst_name: c.doc_title.split(' ')[0], doc_title: c.doc_title, art_ref: c.ref, doc_date: (String(c.doc_id).match(/(\d{8})\.md$/) || [])[1] })), {}).map((c) => c.doc_id + c.ref)); for (let i = chain.length - 1; i >= 0; i--) if (chain[i].level === '기관 규정' && (!chain[i].ref || !kept.has(chain[i].doc_id + chain[i].ref))) chain.splice(i, 1); }
     s.note(`기관 규정 ${chain.filter((c) => c.level === '기관 규정').length}개 조문(법령명·조문 제목 언급으로 찾은 근사 결과)`);
   });
-  return { kind: '법령 단위 확장', errors: [...new Set(chainErrors)], law: { doc_id: law.doc_id, title: law.title, ref: art.ref }, delegations: dels, chain };
+  return { kind: '법령 단위 확장', errors: [...new Set(chainErrors)], inst: input.inst || null, law: { doc_id: law.doc_id, title: law.title, ref: art.ref, article_title: art.title || '' }, delegations: dels, chain };
 }

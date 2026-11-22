@@ -90,3 +90,12 @@ test('with our institution set, wording-only changes still find our same-topic a
   const j2 = await until(all, all.start('radar', { laws: ['테스트법'] }, runRadar, { deps: { sources, llm: null } }));
   assert.equal(j2.result.items.find((x) => x.ref === '제5조').affected.length, 0);
 });
+
+import { renumber } from '../lib/refs.mjs';
+test('a new branch article goes after the existing branches and reports where it really sits', () => {
+  const doc = { articles: [{ ref: '제45조', no: 45, sub: null, section: '본칙' }, { ref: '제45조의4', no: 45, sub: 4, section: '본칙' }, { ref: '제45조의5', no: 45, sub: 5, section: '본칙' }, { ref: '제46조', no: 46, sub: null, section: '본칙' }] };
+  const r = renumber(doc, [{ op: 'insert', after: '제45조의4', renumber: false }]);
+  assert.deepEqual(r.inserted.map((x) => [x.ref, x.after]), [['제45조의6', '제45조의5']]);
+  const r2 = renumber(doc, [{ op: 'insert', after: '제45조의4', renumber: true }]);
+  assert.equal(r2.inserted[0].after, '제45조의4');
+});

@@ -114,6 +114,11 @@ function SimilarView({ onReset }: { onReset: () => void }) {
                 <p className="flex-1 text-sm">우리 기관({r.mine.name}) 규정에서 이 주제를 정한 조문을 찾지 못했습니다{top ? ` — 비교 기관은 ${d.column} ${top.value}로 정한 곳이 가장 많습니다(${top.count}/${d.sample}곳)` : ''}. 주제어를 규정에 쓰인 낱말로 바꿔 다시 찾거나, 새 조문을 넣는 개정을 준비하세요.</p>
                 <Button size="sm" onClick={() => goTab('amend', { intent: `${r.topic}에 관한 조문을 새로 넣는다.${top ? ` 비교 기관(${r.scope_label}) 가운데 ${top.count}곳이 ${d.column}을(를) ${top.value}로 정한다.` : ''}` })}>새 조문 넣기 — 개정 준비<ArrowRightIcon data-icon="inline-end" /></Button>
               </div>)
+            if (r.mine_cases?.length > 1) return (
+              <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-500/40 dark:bg-amber-500/10 sm:flex-row sm:items-center">
+                <p className="flex-1">우리 규정은 경우별로 값이 다릅니다({r.mine_cases.join(' · ')}). 비교표는 대표 값 하나({myVal || '—'})로 견준 것이라, 경우(예: 업무상·업무 외)별로 다른 기관 원문을 확인하세요.{top ? ` 비교 기관에서 가장 많은 값: ${top.value}(${top.count}/${d.sample}곳).` : ''}</p>
+                <Button size="sm" variant="outline" onClick={() => goTab('amend', { doc_id: me.doc_id, refs: me.ref ? [me.ref] : [], intent: `기관 비교(${r.scope_label})를 참고해 ${r.topic}의 경우별 값(${r.mine_cases.join(', ')})을 검토한다.` })}>검토할 조문으로 개정 준비<ArrowRightIcon data-icon="inline-end" /></Button>
+              </div>)
             if (top && myVal && top.value !== myVal) return (
               <div className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3 sm:flex-row sm:items-center">
                 <p className="flex-1 text-sm">우리 기관 {d.column} <b>{myVal}</b> · 비교 기관에서 가장 많은 값 <b>{top.value}</b>({top.count}/{d.sample}곳). 바꿀지 검토하려면 개정을 준비하세요(다른 기관 규정은 참고 사례이며 적용 근거가 아닙니다).</p>

@@ -204,7 +204,10 @@ export async function runSimilar(ctx) {
   if (mineRow && columns.length) { const mk = numKey(mineRow.values[columns[0]], columns[0]); const nums = (t) => new Set([...String(t || '').matchAll(/(\d+(?:\.\d+)?)\s*(일|주|개월|년|시간|회|%|만원|원|세)/g)].map((m) => canon(+m[1], m[2]))); const mine = nums(mineRow.focus);
     // 조문에 경우별 값이 여럿일 수 있다(업무상 180일·그 밖 60일). 상대 값이 우리 조문에도 있으면 '다름'이 아니라 '경우별 값'으로 표시한다
     for (const r of rows) if (!r.mine) { const k = numKey(r.values[columns[0]], columns[0]); const diff = !!mk && !!k && k !== mk && family(k) === family(mk); /* 단위가 다르면(12세·12개월) 비교하지 않는다 */ r.mixed = diff && (mine.has(k) || nums(r.focus).has(mk)); r.differs = diff && !r.mixed; } }
+  // 우리 조문이 경우별로 값이 여럿이면(업무상 병가 180일·그 밖 60일) 대표 값 하나로 「같다/다르다」를 단정하지 않게 알려 준다
+  let mineCases = [];
+  if (mineRow && columns.length) { const unit = (String(mineRow.values[columns[0]] || '').match(/\d+(?:\.\d+)?\s*(일|주|개월|년|시간|회|%|만원|원|세)/) || [])[1]; if (unit) mineCases = [...new Set([...String(mineRow.focus || '').matchAll(new RegExp(`(\\d+(?:\\.\\d+)?)\\s*${unit}`, 'g'))].map((m) => `${m[1]}${unit}`))]; }
   for (const r of rows) { delete r.text; delete r.focus; }
   const dist = columns.length ? distribution(rows, columns, mineRow?.inst) : null;
-  return { kind: '유사 규정 비교', topic, columns, table: rows, distribution: dist, mine: me, scope, scope_label: scopeLabel, off_topic: offTopic, note: `${scopeLabel}에서 검색으로 찾은 ${rows.length}개 기관 기준(전수 아님) · 참고 자료${civilNote}${columns[0] === '수치' ? ' · 값은 주제 문장의 첫 수치를 규칙으로 뽑은 근사값이므로 원문으로 확인하세요' : ''}` };
+  return { kind: '유사 규정 비교', topic, columns, mine_cases: mineCases.length > 1 ? mineCases.slice(0, 6) : [], table: rows, distribution: dist, mine: me, scope, scope_label: scopeLabel, off_topic: offTopic, note: `${scopeLabel}에서 검색으로 찾은 ${rows.length}개 기관 기준(전수 아님) · 참고 자료${civilNote}${columns[0] === '수치' ? ' · 값은 주제 문장의 첫 수치를 규칙으로 뽑은 근사값이므로 원문으로 확인하세요' : ''}` };
 }

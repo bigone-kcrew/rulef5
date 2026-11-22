@@ -50,7 +50,10 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       setRows(offset ? [...(rows || []), ...r.rows] : r.rows); setMore(!isGov && (!!r.has_more || r.rows.length >= limit)); setMs(Date.now() - t0)
     } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
-  const shown = rows ? (sort === 'recent' ? [...rows].sort((a, b) => String(b.effective_from || b.doc_date || '').localeCompare(String(a.effective_from || a.doc_date || ''))) : rows) : null
+  // 우리 기관(기관 설정) 결과를 앞에 둔다 — 같은 순위 안에서는 원래 순서 유지
+  const myInst = (profile.type === 'public-institution' ? profile.alio_inst : /^예시 /.test(profile.name) ? '' : profile.name) || ''
+  const mineFirst = (xs: Row[]) => (myInst ? [...xs].sort((a, b) => Number(b.inst_name === myInst) - Number(a.inst_name === myInst)) : xs)
+  const shown = rows ? mineFirst(sort === 'recent' ? [...rows].sort((a, b) => String(b.effective_from || b.doc_date || '').localeCompare(String(a.effective_from || a.doc_date || ''))) : rows) : null
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-4xl">
@@ -59,7 +62,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <DialogDescription>AI 모델 없이 ALIO RAG(공공기관 공시 내규·법령·단체협약·공시자료){govCorpus ? '와 법제처 국가법령정보' : ''}에서 바로 찾습니다. 결과를 누르면 원문이 열립니다.</DialogDescription>
         </DialogHeader>
         <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); run(0) }}>
-          <div className="flex gap-2"><Input ref={input} value={q} onChange={(e) => setQ(e.target.value)} maxLength={200} placeholder="예: 배우자 출산휴가 · 육아휴직 대체인력 · 당직 휴무" /><Button type="submit" disabled={!q.trim() || busy}>{busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}검색</Button></div>
+          <div className="flex gap-2"><Input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); run(0) } }} maxLength={200} placeholder="예: 배우자 출산휴가 · 육아휴직 대체인력 · 당직 휴무" /><Button type="submit" disabled={!q.trim() || busy}>{busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}검색</Button></div>
           <div className="flex flex-wrap items-center gap-2">
             <select aria-label="자료 범위" value={corpus} onChange={(e) => { const v = e.target.value; if ((v === 'ordin' || v === 'admrul') !== isGov) setInst(''); setCorpus(v); setRows(null) }} className="h-9 rounded-md border bg-background px-2 text-sm">{corpora.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
             {!isGov && <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline">{MODES.map(([v, l, t]) => <ToggleGroupItem key={v} value={v} title={t}>{l}</ToggleGroupItem>)}</ToggleGroup>}

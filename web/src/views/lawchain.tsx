@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
+import { MoreTrigger } from '@/components/more-trigger'
 import { JobTimeline } from '@/components/job-timeline'
 import { StepTitle } from '@/components/keycap'
 import { useApp } from '@/lib/app-state'
 import { useJob } from '@/hooks/use-job'
 import { api, type Doc } from '@/lib/api'
 import { goTab } from '@/App'
+import { InstPicker } from '@/components/inst-picker'
 import { ResetButton, withReset } from '@/components/reset-button'
 
 type Tier = { doc_id: string; title: string; source?: string; date?: string } | null
@@ -25,6 +28,8 @@ function LawChainView({ onReset }: { onReset: () => void }) {
   const [name, setName] = useState(''); const [fam, setFam] = useState<Family | null>(null); const [doc, setDoc] = useState<Doc | null>(null)
   const [ref, setRef] = useState(''); const [filter, setFilter] = useState(''); const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false)
   const job = useJob('lawchain')
+  // 우리 기관: 기관 규정은 우리 것을 먼저 찾는다(비우면 모든 기관에서 참고 사례)
+  const [inst, setInst] = useState(gov ? (named ? profile.name : '') : profile.alio_inst || '')
   const r = job.job?.status === 'done' ? job.job.result : null
   const find = async (q = name) => {
     if (!q.trim()) return
@@ -71,8 +76,9 @@ function LawChainView({ onReset }: { onReset: () => void }) {
             <Input className="max-w-sm" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="조문 번호·제목으로 거르기(예: 연차, 제60조)" />
             <div className="flex max-h-56 flex-wrap gap-1 overflow-y-auto rounded-md border bg-background p-2">{arts.map((a) => <Button key={a.ref!} size="xs" variant={ref === a.ref ? 'default' : 'outline'} onClick={() => setRef(a.ref!)}>{a.ref} {a.title}</Button>)}{!arts.length && <span className="p-1 text-sm text-muted-foreground">맞는 조문이 없습니다.</span>}</div>
             <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
+              <div className="mr-auto flex min-w-60 flex-1 flex-col gap-1 sm:max-w-sm"><label htmlFor="lc-inst" className="text-xs font-medium text-muted-foreground">우리 기관(규정을 찾을 범위 · 비우면 모든 기관)</label><InstPicker id="lc-inst" type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명' : '부처명') : '기관명(예: 창업진흥원)'} /></div>
               {!ref && <span className="text-sm text-muted-foreground">조문을 고르세요</span>}
-              <Button size="lg" disabled={!ref || job.busy} onClick={() => job.start('lawchain', { org_type: profile.type, inst: gov && named ? profile.name : undefined, law_doc_id: fam!.tiers.law!.doc_id, decree_doc_id: fam!.tiers.decree?.doc_id, rule_doc_id: fam!.tiers.rule?.doc_id, ref })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}이 조문을 따라가기</Button>
+              <Button size="lg" disabled={!ref || job.busy} onClick={() => job.start('lawchain', { org_type: profile.type, inst: inst.trim() || undefined, law_doc_id: fam!.tiers.law!.doc_id, decree_doc_id: fam!.tiers.decree?.doc_id, rule_doc_id: fam!.tiers.rule?.doc_id, ref })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}이 조문을 따라가기</Button>
             </div>
           </div>
         )}
@@ -93,10 +99,22 @@ function LawChainView({ onReset }: { onReset: () => void }) {
               </div>) })}
           </div>
           <div className="flex flex-col gap-2 border-t pt-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">이 조문과 닿아 있는 {gov ? `${named ? profile.name + ' ' : ''}${profile.type === 'local-gov' ? '자치법규' : '행정규칙'}` : '기관 규정'}<Badge variant="outline" className="font-mono">{r.chain.filter((c: any) => c.level === '기관 규정').length}</Badge><span className="font-normal text-muted-foreground">법령명·조문 제목 언급으로 찾은 근사 결과</span></div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {r.chain.filter((c: any) => c.level === '기관 규정').slice(0, 30).map((c: any, k: number) => <div key={k} className="rounded-md border bg-background p-3 text-sm"><div className="font-medium"><DocLink docId={c.doc_id} refName={c.ref}>{c.doc_title} {c.ref}</DocLink></div><p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{c.excerpt}</p>{c.ref && <Button className="mt-1 h-auto px-0" size="xs" variant="link" onClick={() => goTab('amend', { doc_id: c.doc_id, refs: [c.ref], intent: `${r.law.title} ${r.law.ref} 개정 내용을 반영한다.` })}>이 조문 개정하기</Button>}</div>)}
-            </div>
+            {(() => {
+              // 우리 기관 규정을 먼저, 다른 기관 것은 「참고」로 나눈다 — 다른 기관 규정은 우리가 고칠 대상이 아니다
+              const all = r.chain.filter((c: any) => c.level === '기관 규정'), me = (r.inst || '').replace(/\s+/g, '')
+              const isMine = (c: any) => !!me && String(c.inst || c.doc_title || '').replace(/\s+/g, '').startsWith(me)
+              const mine = all.filter(isMine), others = all.filter((c: any) => !isMine(c))
+              const card = (c: any, k: number, own: boolean) => <div key={k} className={`rounded-md border p-3 text-sm ${own ? 'border-primary/40 bg-primary/5' : 'bg-background'}`}><div className="font-medium"><DocLink docId={c.doc_id} refName={c.ref}>{c.doc_title} {c.ref}</DocLink></div><p className="mt-1 line-clamp-3 text-xs text-muted-foreground">{c.excerpt}</p>{own && c.ref && <Button className="mt-2" size="xs" variant="outline" onClick={() => goTab('amend', { doc_id: c.doc_id, refs: [c.ref], intent: `「${r.law.title}」 ${r.law.ref}(${r.law.article_title || ''})과 그 시행령·시행규칙의 위임 내용에 맞는지 ${c.ref}(${c.title || ''})를 검토해 고친다.`.replace('()', '') })}>개정 준비<ArrowRightIcon data-icon="inline-end" /></Button>}</div>
+              return (<>
+                <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">{r.inst ? `${r.inst} 규정` : '기관 규정'}<Badge variant="outline" className="font-mono">{r.inst ? mine.length : all.length}</Badge><span className="font-normal text-muted-foreground">법령명·조문 제목 언급으로 찾은 근사 결과</span></div>
+                {r.inst && !mine.length && <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">{r.inst} 규정에서 이 조문과 닿아 있는 조문을 찾지 못했습니다(규정이 없다는 뜻은 아님).</p>}
+                {r.inst ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{mine.slice(0, 30).map((c: any, k: number) => card(c, k, true))}</div>
+                  : <p className="text-xs text-muted-foreground">우리 기관을 정하지 않아 모든 기관 규정에서 찾았습니다(참고 사례). 위에서 우리 기관을 고르면 우리 규정만 보고 바로 개정을 준비할 수 있습니다.</p>}
+                {others.length > 0 && (r.inst ? (
+                  <Collapsible><MoreTrigger>참고: 다른 기관 규정 {others.length}건</MoreTrigger><CollapsibleContent><div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{others.slice(0, 30).map((c: any, k: number) => card(c, k, false))}</div></CollapsibleContent></Collapsible>
+                ) : <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{others.slice(0, 30).map((c: any, k: number) => card(c, k, false))}</div>)}
+              </>)
+            })()}
           </div>
         </section>
       )}

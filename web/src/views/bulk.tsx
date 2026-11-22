@@ -47,7 +47,7 @@ function BulkView({ preset, onReset }: { preset?: { find?: string; rep?: string;
             </div>
             <FieldDescription>결과: 규정별 위치 특정형 개정문(「제3조제1항 중 "근로자는"을 "직원은"으로 한다」), 규정별 신구조문대비표, 재검증(용어·인용).</FieldDescription>
           </FieldGroup>
-          <div className="mt-4 flex justify-end"><Button size="lg" disabled={job.busy || !find.trim() || !rep.trim() || (mode === 'docs' ? !picked?.uploads.length : !inst.trim())} onClick={() => job.start('bulk', { org_type: profile.type, find: find.trim(), replace: rep.trim(), ...(mode === 'docs' ? { doc_ids: picked!.uploads } : { inst: inst.trim() }) })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}바꿀 곳 찾기</Button></div>
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-3">{(mode === 'docs' ? !picked?.uploads.length : !inst.trim()) ? <span className="text-sm text-muted-foreground">1단계에서 대상 규정을 정하세요</span> : (!find.trim() || !rep.trim()) && <span className="text-sm text-muted-foreground">찾을 말과 바꿀 말을 적으세요</span>}<Button size="lg" disabled={job.busy || !find.trim() || !rep.trim() || (mode === 'docs' ? !picked?.uploads.length : !inst.trim())} onClick={() => job.start('bulk', { org_type: profile.type, find: find.trim(), replace: rep.trim(), ...(mode === 'docs' ? { doc_ids: picked!.uploads } : { inst: inst.trim() }) })}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowRightIcon data-icon="inline-start" />}바꿀 곳 찾기</Button></div>
         </CardContent>
       </Card>
       <JobTimeline job={job.job} error={job.error} startedAt={job.startedAt} onAnswer={job.answer} onRetry={job.canRetry ? job.retry : undefined} title="일괄 개정" />

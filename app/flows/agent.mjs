@@ -98,6 +98,9 @@ export async function runAgent(ctx) {
     if (!tool) { ctx.log(`✗ 알 수 없는 도구 '${item.tool}' — 건너뜁니다.`); item.skipped = true; view(); continue; }
     // 조문 번호를 모르는 채(「제X조」「제○조」) 조문 보기를 부르는 단계는 계획에서 뺀다 — 개정 흐름이 대상 조문을 스스로 찾는다
     if (item.tool === 'get_article' && !/^제\s*\d+\s*조(의\s*\d+)?$/.test(String(item.args?.ref || '').trim())) { ctx.log('· 조문 번호가 정해지지 않아 조문 보기는 건너뜁니다.'); queue.splice(i, 1); i--; view(); continue; }
+    // 할 일이 없는 단계(규정을 불러온 뒤의 질문, 의견 없이 의견 검토 등)는 진행 화면에 단계로 남기지 않는다
+    const why = tool.skipIf?.(item.args || {}, st, ctx);
+    if (why) { ctx.log(`· ${TOOL_KO[item.tool] || item.tool} 건너뜀: ${why}`); queue.splice(i, 1); i--; view(); continue; }
     const key = item.tool + JSON.stringify(item.args);
     if (seen.has(key)) { ctx.log(`✗ 같은 호출 반복 차단: ${item.tool}`); item.skipped = true; view(); continue; }
     seen.add(key); executed++;
@@ -134,6 +137,9 @@ export async function runAgent(ctx) {
   if ((need === 'draft_amendment' || need === 'draft_enactment') && !st.result?.docset) finalSummary = `요청한 ${need === 'draft_amendment' ? '개정안' : '제정안'}을 만들지 못했습니다. ${st.doc ? '' : '대상 규정을 찾지 못했습니다. 기관명과 규정명을 정확히 적거나 F2에서 규정을 직접 골라 주세요.'}`.trim();
   // 수정안이 현행과 같으면(이미 반영됨) 모델 요약과 상관없이 그 사실을 앞에 알린다
   if (st.result?.no_change) finalSummary = [`바꿀 곳이 없습니다: ${st.result.no_change.refs.join(', ')}의 수정안이 현행과 같습니다. 요청한 내용이 이미 규정에 들어 있는지 원문을 확인하세요.`, finalSummary].filter(Boolean).join(' ');
+  // 요약이 근거 자료에 없는 법령명을 말하면(모델 착오) 근거와 대조하라고 덧붙인다
+  { const ev = (st.result?.docset?.evidence || []).map((e) => e.label).join(' ').replace(/[ㆍ·\s]/g, ''); const odd = ev ? lawNames(String(finalSummary || '')).filter((n) => !ev.includes(n.replace(/[ㆍ·\s]/g, ''))) : [];
+    if (odd.length) finalSummary = `${finalSummary} (참고: 요약에 나온 「${odd.join('」·「')}」은(는) 이번 근거 자료에 없는 법령명입니다. 근거 자료의 법령을 확인하세요.)`; }
   // 도구가 「사용자에게 알릴 것」으로 표시한 경고는 모델 요약에 빠져도 마지막 요약에 붙인다
   const warn = st.result?.sibling ? `참고: 이 규정에는 해당 조문이 없어 새 조문을 만들었습니다. 같은 기관 「${st.result.sibling.title}」 ${st.result.sibling.ref}(${st.result.sibling.art_title})에 이미 같은 주제가 있으니, 그 규정을 고치는 것이 맞는지 확인하세요.` : '';
   if (warn && !String(finalSummary).includes(st.result.sibling.title)) finalSummary = [finalSummary, warn].filter(Boolean).join(' ');

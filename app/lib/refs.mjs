@@ -20,7 +20,7 @@ export function extractCitations(body) {
       const aliasNamed = before.match(/((?:같은|이)\s*법\s*시행령|(?:같은|이)\s*법\s*시행규칙|시행령|시행규칙|[가-힣ㆍ·]{1,30}(?:법률|법|령|규정|규칙))\s*\(이하[^)]{0,30}\)\s*$/);
       const spacedLaw = before.match(/((?:[가-힣ㆍ·]+\s){0,6}[가-힣ㆍ·]*에\s*관한\s*법률(?:\s*시행령|\s*시행규칙)?)\s*$/);
       const named = before.match(/([가-힣ㆍ·]{1,30}(?:법률|법|령|규정|규칙|지침|세칙|요령|정관|예규|조례|협약))\s*$/);
-      const generic = before.match(/(?:^|[^가-힣])((?:같은|이)\s*법|법률|법|영|시행령|시행규칙|규칙|정관|규정|조례|지침|부칙)\s*$/);
+      const generic = before.match(/(?:^|[^가-힣])((?:같은|동)\s*(?:법\s*시행령|법\s*시행규칙|시행령|시행규칙|령|영|규칙|법률)|(?:같은|이)\s*법|법률|법|영|시행령|시행규칙|규칙|정관|규정|조례|지침|부칙)\s*$/);
       const prev = out[out.length - 1];
       const between = prev ? s.slice(prev.index + prev.text.length, index) : '';
       // 같은 조문을 앞에서 외부 규정으로 인용했으면 그 조문의 항·호 인용도 외부다(「…」 제11조 … (제11조제4항 및 제5항은 제외))
@@ -87,11 +87,12 @@ export function renumber(doc, ops) {
       const i = find(op.after), x = items[i];
       if (op.renumber) {
         for (let j = i + 1; j < items.length; j++) items[j].no += 1;
-        const n = { no: x.no + 1, sub: null, orig: null, new: true, op }; items.splice(i + 1, 0, n); inserted.push(n);
+        const n = { no: x.no + 1, sub: null, orig: null, new: true, op, at: refOf(x.no, x.sub) }; items.splice(i + 1, 0, n); inserted.push(n);
       } else {
         let last = i; for (let j = i + 1; j < items.length; j++) if (items[j].no === x.no) last = j;
         const maxSub = Math.max(1, ...items.filter((y) => y.no === x.no).map((y) => y.sub || 0));
-        const n = { no: x.no, sub: maxSub + 1, orig: null, new: true, op }; items.splice(last + 1, 0, n); inserted.push(n);
+        // 가지 번호는 이미 있는 가지 조문(제45조의5 등) 뒤에 붙인다 — 실제 자리를 at 에 남겨 문서마다 같은 위치를 쓰게 한다
+        const n = { no: x.no, sub: maxSub + 1, orig: null, new: true, op, at: refOf(items[last].no, items[last].sub) }; items.splice(last + 1, 0, n); inserted.push(n);
       }
     } else if (op.op === 'delete') {
       const i = find(op.ref), x = items[i];
@@ -105,7 +106,7 @@ export function renumber(doc, ops) {
   const map = new Map();
   for (const x of items) if (x.orig && refOf(x.no, x.sub) !== x.orig) map.set(x.orig, refOf(x.no, x.sub));
   for (const x of items.removed || []) map.set(x.orig, null);
-  return { map, inserted: inserted.map((x) => ({ ref: refOf(x.no, x.sub), op: x.op })) };
+  return { map, inserted: inserted.map((x) => ({ ref: refOf(x.no, x.sub), op: x.op, after: x.at })) };
 }
 
 export function corrections(docs, targetDocId, map) {

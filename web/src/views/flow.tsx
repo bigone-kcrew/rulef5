@@ -152,7 +152,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
               </li>
             )
           })}
-          {folded && <li className="shrink-0"><button type="button" onClick={() => setShowAll(true)} className="flex h-full min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-card/70 hover:text-foreground"><ChevronDownIcon className="size-4" /><span className="whitespace-nowrap">이후 절차 {steps.length - reviewAt - 1}단계<span className="hidden lg:inline"> 보기</span></span></button></li>}
+          {folded && <li className="shrink-0"><button type="button" onClick={() => setShowAll(true)} className="flex h-full min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-card/70 hover:text-foreground"><ChevronDownIcon className="size-4" /><span className="whitespace-nowrap"><span className="lg:hidden">+{steps.length - reviewAt - 1}단계</span><span className="hidden lg:inline">이후 절차 {steps.length - reviewAt - 1}단계 보기</span></span></button></li>}
         </ol>
         {title && <p className="mt-3 hidden border-t px-1 pt-3 text-xs text-muted-foreground lg:block">진행 중: {title}</p>}
       </nav>
@@ -235,10 +235,12 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                       <section className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:p-4">
                         <h3 className="flex items-center gap-2 font-semibold"><MessageSquareQuoteIcon className="size-4" />받은 의견 반영하기 <span className="text-sm font-normal text-muted-foreground">(선택)</span></h3>
                         <p className="text-sm text-muted-foreground">회신받은 의견을 붙여넣으면 의견별 처리안을 만들고, 반영할 의견은 직접 고릅니다. 의견마다 [부서명]으로 시작하거나 빈 줄 두 개로 나눠 주세요.</p>
-                        <Textarea rows={5} value={opText} onChange={(e) => setOpText(e.target.value)} placeholder={'[인사팀] 분할 사용 횟수를 3회로 해 주십시오.\n\n\n[노동조합] 청구 기한 120일 반영 바랍니다.'} />
+                        <Textarea rows={5} value={opText} onChange={(e) => setOpText(e.target.value)} placeholder={'예)\n[인사팀] 시행일을 다음 달 1일로 해 주십시오.\n\n\n[노동조합] 신청 기한을 지금보다 줄이지 말아 주십시오.'} />
                         <div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" disabled={!opText.trim() || opinions.busy} onClick={() => opinions.start('opinions', { title, kind: mode === 'enact' ? '제정' : '개정', changes: flow.result.changes, moves: flow.result.moves, opinions_text: opText, doc_id: flow.result.doc?.doc_id, addenda: sec('addenda')?.body })}>{opinions.busy && <Spinner data-icon="inline-start" />}처리안 만들기</Button></div>
                         <JobTimeline job={opinions.job} error={opinions.error} startedAt={opinions.startedAt} onAnswer={opinions.answer} onRetry={opinions.canRetry ? opinions.retry : undefined} title="의견 검토" />
-                        {flow.opinionJob && opinions.job?.id === flow.opinionJob && <Alert><AlertTitle>의견을 반영했습니다</AlertTitle><AlertDescription>신구조문대비표와 {mode === 'amend' ? '개정문' : '제정안'}을 고쳤고, 「의견 검토서」를 이 단계 문서에 추가했습니다.</AlertDescription></Alert>}
+                        {flow.opinionJob && opinions.job?.id === flow.opinionJob && (() => { const n = (opinions.job?.result?.items || []).filter((x: any) => x.applied).length, all = (opinions.job?.result?.items || []).length; return n
+                          ? <Alert><AlertTitle>의견 {n}건을 반영했습니다{all > n ? ` (반영하지 않음 ${all - n}건)` : ''}</AlertTitle><AlertDescription>신구조문대비표와 {mode === 'amend' ? '개정문' : '제정안'}을 고쳤고, 「의견 검토서」를 이 단계 문서에 추가했습니다.</AlertDescription></Alert>
+                          : <Alert><AlertTitle>반영한 의견이 없습니다</AlertTitle><AlertDescription>{mode === 'amend' ? '개정문' : '제정안'}은 그대로이고, 의견별 처리 결과를 담은 「의견 검토서」만 이 단계 문서에 추가했습니다.</AlertDescription></Alert> })()}
                       </section>
                     )}
                     <p className="text-xs text-muted-foreground">{proc.note}</p>

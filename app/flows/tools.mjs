@@ -191,12 +191,17 @@ export const TOOLS = {
   },
   ask_user: {
     desc: '판단이 필요할 때 사용자에게 묻는다(선택지 2~6개).', args: { question: '질문', options: '["선택지"]' },
+    skipIf: (a, st) => (st.doc ? '규정을 불러온 뒤에는 따로 묻지 않습니다' : null),
     async run(a, deps, st, ctx) {
       // 규정을 불러온 뒤 「조문 번호를 알려 달라」는 질문은 묻지 않는다 — 개정 흐름이 조문을 찾고 없으면 새 조문으로 둔다
       // 규정을 불러온 뒤에는 묻지 않는다 — 질문은 시작할 때(대상 규정을 특정할 수 없을 때)만. 이후 판단은 개정 흐름의 확인 화면에서 한 번에 받는다
       if (st.doc) return { summary: '규정을 불러온 뒤에는 따로 묻지 않고 진행합니다. 대상 조문과 근거는 개정안 작성 단계의 확인 화면에서 고릅니다.' };
       if (st.doc && /조문\s*번호|몇\s*조|어느\s*조|해당\s*조(?:문|항)/.test(String(a.question || ''))) return { summary: '조문 번호는 묻지 않습니다. draft_amendment 를 refs 없이 실행하면 개정 흐름이 대상 조문을 찾고, 없으면 새 조문으로 둡니다.' };
       const opts = (Array.isArray(a.options) ? a.options : []).map((o) => str(String(o), 100)).filter(Boolean).slice(0, 6);
+      // 요청 문장에 선택지 하나가 그대로 적혀 있으면(예: 「복무규정」) 다시 묻지 않고 그것으로 진행한다
+      const flatQ = (t) => String(t || '').replace(/[\s·ㆍ]/g, '');
+      const named = opts.filter((o) => flatQ(o).length >= 2 && !/^(기타|예|아니요|그 밖|직접)/.test(o) && flatQ(ctx.input.message).includes(flatQ(o)));
+      if (named.length === 1) { st.answers.push(named[0]); return { summary: `요청 문장에 적힌 「${named[0]}」(으)로 진행합니다.` }; }
       // 자동 실행(평가·스크립트)에서는 사람에게 묻지 않고 첫 선택지로 진행한다
       if (ctx.input.auto) { const v = opts[0] || '예'; st.answers.push(v); return { summary: `자동 진행: ${v}` }; }
       const v = await ctx.gate({ id: `ask_${Date.now()}`, prompt: str(a.question, 200) || '확인해 주세요.', options: (opts.length ? opts : ['예', '아니요']).map((o, i) => ({ value: o, label: o, checked: i === 0 })) });
@@ -215,6 +220,7 @@ export const TOOLS = {
   },
   review_opinions: {
     desc: '만든 개정안에 대해 수렴한 의견을 검토해 처리안을 만들고 담당자가 고른 의견을 반영한다.', args: { opinions_text: '의견 원문' },
+    skipIf: (a, st) => (!st.result?.changes ? '아직 개정안이 없습니다' : String(a.opinions_text || '').trim().length < 5 ? '검토할 의견 원문이 없습니다' : null),
     async run(a, deps, st, ctx) {
       const run = deps.flows?.opinions; if (!run || !st.result?.changes) return { summary: '먼저 개정안을 만들어야 합니다.' };
       st.result = await run(sub(ctx, { title: st.result.docset?.title, kind: '개정', changes: st.result.changes, moves: st.result.moves, opinions_text: str(a.opinions_text, 8000), doc_id: st.doc?.doc_id, auto: ctx.input.auto }));

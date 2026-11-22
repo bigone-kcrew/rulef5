@@ -54,7 +54,8 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
     setLoading('doc'); setRefs([])
     try { const d = await api<Doc>('/api/doc?id=' + encodeURIComponent(id)); setDoc(d); onChange({ doc: d, uploads, refs: [] }) } catch (e) { setMsg({ ...msg, [tab]: (e as Error).message }) } finally { setLoading(null) }
   }
-  const searchAlio = async (i0?: string, k0?: string) => {
+  // pick: 바로 찾기 칩처럼 규정명이 정해져 있으면, 이름이 똑같은 결과가 하나일 때 바로 고른다(한 번 더 누르지 않게)
+  const searchAlio = async (i0?: string, k0?: string, pick?: string) => {
     const inst = i0 ?? inst0, kw = k0 ?? kw0
     if (!kw.trim() && !inst.trim()) return setMsg({ ...msg, alio: '기관명이나 규정명을 입력하세요.' })
     setLoading('alio'); setMsg({ ...msg, alio: '' })
@@ -62,6 +63,8 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
       const r = await api('/api/search', { method: 'POST', body: { keyword: kw.trim() || '목적', inst: inst.trim() || undefined, corpus: 'bylaws', limit: 50, hybrid: !!kw.trim() || undefined } })
       const seen = new Map<string, any>(); for (const x of r.rows) if (!seen.has(x.doc_id)) seen.set(x.doc_id, x)
       setItems({ ...items, alio: [...seen.values()].map((x) => ({ doc_id: x.doc_id, title: x.doc_title, sub: `${x.inst_name || ''} · ${x.doc_type || ''} · ${x.effective_from || x.doc_date || ''}${kw ? ` · ${x.art_ref || ''} ${x.art_title || ''}` : ''}`, state: x.edition_state })) })
+      const exact = pick ? [...seen.values()].filter((x) => x.doc_title === pick) : []
+      if (exact.length === 1 && !multi) await choose(exact[0].doc_id)
       if (!seen.size) setMsg({ ...msg, alio: r.degraded ? '검색 일부가 실패했습니다. 다시 시도하세요(0건이 없음을 뜻하지 않습니다).' : '결과가 없습니다.' })
     } catch (e) { setMsg({ ...msg, alio: (e as Error).message }) } finally { setLoading(null) }
   }
@@ -140,7 +143,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
             <Input className="w-full sm:w-auto sm:min-w-40 sm:flex-1" placeholder="규정명·주제(예: 취업규칙, 출산휴가)" value={kw} onChange={(e) => setKw(e.target.value)} maxLength={100} />
             <Button type="submit" className="w-full sm:w-auto" disabled={loading === 'alio'}>{loading === 'alio' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
-          {!items.alio?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 실제 공시 규정으로 해 보세요:</span>{[['창업진흥원', '복무규정'], ['한국전력공사', '취업규칙'], ['소상공인시장진흥공단', '복무규정']].map(([i, k]) => <button key={i} type="button" className={CHIP} onClick={() => { setInst(i); setKw(k); searchAlio(i, k) }}>{i} · {k}</button>)}</div>}
+          {!items.alio?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 실제 공시 규정으로 해 보세요:</span>{[['창업진흥원', '복무규정'], ['한국전력공사', '취업규칙'], ['소상공인시장진흥공단', '복무규정']].map(([i, k]) => <button key={i} type="button" className={CHIP} onClick={() => { setInst(i); setKw(k); searchAlio(i, k, k) }}>{i} · {k}</button>)}</div>}
           {list('alio')}
         </TabsContent>
         <TabsContent value="gov" className="pt-2">
