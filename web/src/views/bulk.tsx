@@ -15,10 +15,13 @@ import { useApp } from '@/lib/app-state'
 import { useJob } from '@/hooks/use-job'
 import { StepTitle } from '@/components/keycap'
 
-export default function BulkView() {
+// preset: F8 규정 점검의 「일괄 개정으로 통일」에서 찾을 말·바꿀 말·대상 규정을 넘겨받는다
+export default function BulkView({ preset }: { preset?: { find?: string; rep?: string; docs?: { doc_id: string; title: string }[] } | null }) {
   const { profile } = useApp(); const gov = profile.type !== 'public-institution', word = profile.type === 'local-gov' ? '자치법규' : '행정규칙'
-  const [mode, setMode] = useState('docs'); const [inst, setInst] = useState(gov ? (/^예시 /.test(profile.name) ? '' : profile.name) : profile.alio_inst || ''); const [picked, setPicked] = useState<Picked | null>(null)
-  const [find, setFind] = useState(''); const [rep, setRep] = useState('')
+  const fromCheck = preset?.docs?.length ? preset.docs : null
+  const [mode, setMode] = useState('docs'); const [inst, setInst] = useState(gov ? (/^예시 /.test(profile.name) ? '' : profile.name) : profile.alio_inst || ''); const [picked, setPicked] = useState<Picked | null>(fromCheck ? { doc: { doc_id: fromCheck[0].doc_id } as any, uploads: fromCheck.map((d) => d.doc_id), refs: [] } : null)
+  const [usePreset, setUsePreset] = useState(!!fromCheck)
+  const [find, setFind] = useState(preset?.find || ''); const [rep, setRep] = useState(preset?.rep || '')
   const job = useJob('bulk')
   const r = job.job?.status === 'done' ? job.job.result : null
   return (
@@ -27,7 +30,9 @@ export default function BulkView() {
         <CardHeader><StepTitle n={1}>대상 규정</StepTitle><CardDescription>바꿀 규정 묶음을 올리거나 ALIO 기관 전체를 고릅니다.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
           <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline"><ToggleGroupItem value="docs">규정 선택·업로드</ToggleGroupItem><ToggleGroupItem value="inst">{gov ? `우리 기관 ${word} 전체` : 'ALIO 기관 전체'}</ToggleGroupItem></ToggleGroup>
-          {mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : <InstPicker lazy type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시) — 법제처 자치법규' : '부처명(예: 고용노동부) — 법제처 행정규칙') : '기관명(ALIO 공시 기관명)'} />}
+          {mode === 'docs' && usePreset && fromCheck ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"><span className="text-muted-foreground">규정 점검에서 넘어온 규정:</span><b>{fromCheck.map((d) => d.title).join(', ')}</b><Button variant="ghost" size="xs" className="ml-auto" onClick={() => { setUsePreset(false); setPicked(null) }}>다른 규정 고르기</Button></div>
+          ) : mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : <InstPicker lazy type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시) — 법제처 자치법규' : '부처명(예: 고용노동부) — 법제처 행정규칙') : '기관명(ALIO 공시 기관명)'} />}
         </CardContent>
       </Card>
       <Card>

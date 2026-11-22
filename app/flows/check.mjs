@@ -26,7 +26,7 @@ export function checkDocs(docs, { wholeInstitution = false, terms = null, orgTyp
   const upper = orgType === 'local-gov' && String(org || '').trim().includes(' ') ? String(org).trim().split(/\s+/)[0] : null;
   if (upper) orgWords.delete(upper); // 「서울특별시 강남구 …」 제명의 첫 낱말(서울특별시)은 우리 기관이 아니다
   const out = [];
-  const add = (type, severity, d, ref, message, evidence, at = null) => out.some((x) => x.type === type && x.doc_id === d.doc_id && x.ref === ref && x.message === message) || out.push({ type, severity, doc_id: d.doc_id, doc_title: d.title, ref, message, evidence: evidence ? (at === null ? clip(evidence, 220) : `…${evidence.slice(Math.max(0, at - 60), at + 90)}…`) : null });
+  const add = (type, severity, d, ref, message, evidence, at = null, fix = null) => out.some((x) => x.type === type && x.doc_id === d.doc_id && x.ref === ref && x.message === message) || out.push({ type, severity, doc_id: d.doc_id, doc_title: d.title, ref, message, evidence: evidence ? (at === null ? clip(evidence, 220) : `…${evidence.slice(Math.max(0, at - 60), at + 90)}…`) : null, ...(fix ? { fix } : {}) });
   const GOV = /(공무원|국가|정부|대통령|총리|부령|공공기관의|공기업|준정부기관|에 관한 지침|운영에 관한|혁신에 관한|법$|령$|^공공기관)/;
   // 다른 기관(중앙행정기관)의 규정·기준은 우리 기관 규정 누락이 아니다(예: 「조달청 평가위원 통합관리규정」)
   const otherAgency = (name) => AGENCIES.some((g) => String(name).startsWith(g) && !orgWords.has(g));
@@ -62,7 +62,7 @@ export function checkDocs(docs, { wholeInstitution = false, terms = null, orgTyp
       const def = g.find((t) => defined.has(t)); if (!def) continue;
       for (const other of g.filter((t) => t !== def)) {
         const used = main.filter((a) => !/정의/.test(a.title) && new RegExp(`(^|[^가-힣])${other.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(a.body.replace(/["“][^"”]*["”]/g, '')));
-        if (used.length) add('term', 'mid', d, used.map((a) => a.ref).join(', '), `정의한 용어 "${def}" 대신 "${other}"${josa(other, "을", "를")} 씁니다(${used.map((a) => a.ref).join(', ')}).`, used[0].body);
+        if (used.length) add('term', 'mid', d, used.map((a) => a.ref).join(', '), `정의한 용어 "${def}" 대신 "${other}"${josa(other, "을", "를")} 씁니다(${used.map((a) => a.ref).join(', ')}).`, used[0].body, null, { find: other, rep: def });
       }
     }
     // 수치 충돌: 같은 주제어 묶음·같은 단위에서 다른 값을 정한 조문 쌍

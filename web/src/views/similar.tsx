@@ -101,9 +101,25 @@ export default function SimilarView() {
       {r && (
         <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:p-6">
           <header><h2 className="text-xl font-semibold tracking-tight">{r.topic} — {r.scope_label}</h2><p className="mt-1 text-sm text-muted-foreground">{r.note}. 다른 기관 규정은 참고 사례이며 우리 기관 적용 근거가 아닙니다. 판본·적용 대상을 원문으로 확인하세요.</p></header>
-          {r.mine && !r.table.some((x: any) => x.mine) && <p className="rounded-md border border-dashed px-3 py-2 text-sm">우리 기관({r.mine.name}) 규정에서 이 주제를 정한 조문을 찾지 못했습니다. 주제어를 규정에 쓰인 낱말로 바꿔 보세요.</p>}
+          {(() => {
+            // 다음 단계: 우리 값이 비교 기관에서 가장 흔한 값과 다르면 바로 개정 준비, 우리 규정에 조문이 없으면 신설 검토
+            const me = r.table.find((x: any) => x.mine), d = r.distribution, top = d?.buckets?.length ? [...d.buckets].sort((a: any, b: any) => b.count - a.count)[0] : null
+            const myVal = d?.mine?.value || (me && d ? me.values?.[d.column] : null)
+            if (!r.mine) return null
+            if (!me) return (
+              <div className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3 sm:flex-row sm:items-center">
+                <p className="flex-1 text-sm">우리 기관({r.mine.name}) 규정에서 이 주제를 정한 조문을 찾지 못했습니다{top ? ` — 비교 기관은 ${d.column} ${top.value}로 정한 곳이 가장 많습니다(${top.count}/${d.sample}곳)` : ''}. 주제어를 규정에 쓰인 낱말로 바꿔 다시 찾거나, 새 조문을 넣는 개정을 준비하세요.</p>
+                <Button size="sm" onClick={() => goTab('amend', { intent: `${r.topic}에 관한 조문을 새로 넣는다.${top ? ` 비교 기관(${r.scope_label}) 가운데 ${top.count}곳이 ${d.column}을(를) ${top.value}로 정한다.` : ''}` })}>새 조문 넣기 — 개정 준비<ArrowRightIcon data-icon="inline-end" /></Button>
+              </div>)
+            if (top && myVal && top.value !== myVal) return (
+              <div className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3 sm:flex-row sm:items-center">
+                <p className="flex-1 text-sm">우리 기관 {d.column} <b>{myVal}</b> · 비교 기관에서 가장 많은 값 <b>{top.value}</b>({top.count}/{d.sample}곳). 바꿀지 검토하려면 개정을 준비하세요(다른 기관 규정은 참고 사례이며 적용 근거가 아닙니다).</p>
+                <Button size="sm" onClick={() => goTab('amend', { doc_id: me.doc_id, refs: me.ref ? [me.ref] : [], intent: `기관 비교(${r.scope_label}, ${d.sample}곳)에서 ${r.topic}의 ${d.column}을(를) ${top.value}로 정한 기관이 가장 많다(${top.count}곳). 우리 ${me.ref || '조문'}(현재 ${myVal})을(를) ${top.value}로 바꾸는 것을 검토한다.` })}>개정 준비<ArrowRightIcon data-icon="inline-end" /></Button>
+              </div>)
+            if (top && myVal) return <p className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">우리 기관 {d.column} <b className="text-foreground">{myVal}</b> — 비교 기관에서 가장 많은 값과 같습니다({top.count}/{d.sample}곳). 지금 바꿀 필요는 없어 보입니다.</p>
+            return null
+          })()}
           {r.off_topic?.length > 0 && <p className="text-sm text-muted-foreground">주제 조문을 찾지 못해 뺀 기관 {r.off_topic.length}곳: {r.off_topic.join(', ')} <span className="whitespace-nowrap">(검색 범위에서 못 찾았다는 뜻이며 규정이 없다는 뜻은 아닙니다)</span></p>}
-          {r.mine && !r.table.some((x: any) => x.mine) && <p className="rounded-md border border-dashed p-3 text-sm">우리 기관({r.mine.name}) 규정에서는 이 주제의 조문을 찾지 못했습니다. 다른 기관 결과만 보여 줍니다.</p>}
           {r.distribution?.buckets?.length > 0 && (
             <div className="rounded-md border bg-background p-3 sm:p-4">
               <div className="mb-2 text-sm font-medium">분포 — {r.distribution.column} <span className="font-normal text-muted-foreground">(조사 {r.distribution.sample}곳 · 값을 못 찾은 곳 {r.distribution.failed}곳)</span></div>
@@ -122,7 +138,7 @@ export default function SimilarView() {
               <TableHeader><TableRow><TableHead className="w-52">기관·규정</TableHead>{r.columns.map((c: string) => <TableHead key={c}>{c}</TableHead>)}<TableHead>원문 발췌</TableHead></TableRow></TableHeader>
               <TableBody>{r.table.map((x: any) => (
                 <TableRow key={x.key} className={x.mine ? 'bg-primary/5' : ''}>
-                  <TableCell className="whitespace-normal align-top"><div className="flex flex-wrap items-center gap-1.5 font-medium">{x.inst}{x.mine && <Badge>우리 기관</Badge>}</div><div className="text-xs text-muted-foreground"><DocLink docId={x.doc_id} refName={x.ref}>{x.doc_title} {x.ref}</DocLink> · {x.edition}</div><div className="text-xs text-muted-foreground">{x.type}{x.ministry ? ` · ${x.ministry}` : ''}</div>{x.mine && <Button variant="link" size="xs" className="h-auto px-0" onClick={() => goTab('amend', { doc_id: x.doc_id, refs: x.ref ? [x.ref] : [] })}>이 조문 개정하기</Button>}</TableCell>
+                  <TableCell className="whitespace-normal align-top"><div className="flex flex-wrap items-center gap-1.5 font-medium">{x.inst}{x.mine && <Badge>우리 기관</Badge>}</div><div className="text-xs text-muted-foreground"><DocLink docId={x.doc_id} refName={x.ref}>{x.doc_title} {x.ref}</DocLink> · {x.edition}</div><div className="text-xs text-muted-foreground">{x.type}{x.ministry ? ` · ${x.ministry}` : ''}</div>{x.mine && <Button variant="link" size="xs" className="h-auto px-0" onClick={() => goTab('amend', { doc_id: x.doc_id, refs: x.ref ? [x.ref] : [], intent: `기관 비교(${r.scope_label}) 결과를 참고해 ${x.ref || ''}(${r.topic})를 검토한다.` })}>이 조문 개정하기</Button>}</TableCell>
                   {r.columns.map((c: string, ci: number) => <TableCell key={c} className="whitespace-normal align-top font-medium">{x.values[c] || <span className="text-muted-foreground">—</span>}{ci === 0 && x.differs && <Badge variant="outline" className="ml-1.5">우리와 다름</Badge>}{ci === 0 && x.mixed && <Badge variant="outline" className="ml-1.5 font-normal text-muted-foreground">경우별 값 · 원문 확인</Badge>}</TableCell>)}
                   <TableCell className="whitespace-normal align-top text-sm text-muted-foreground">{x.excerpt}</TableCell>
                 </TableRow>))}
