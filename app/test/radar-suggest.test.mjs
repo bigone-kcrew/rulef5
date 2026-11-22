@@ -69,3 +69,24 @@ test('law evidence is checked against the current 법제처 text and flags an up
   await checkLawsLive({ lawGo: { enabled: true, timeline: async () => { throw new Error('down'); } } }, broken, { today });
   assert.equal(broken[0].text, '그대로');
 });
+
+test('with our institution set, wording-only changes still find our same-topic articles and every hit carries an amendment preset', async () => {
+  const v1 = day(-200), v2 = day(40);
+  const doc = (body, eff, extra = []) => ({ doc_id: `law:law:${eff}`, title: '테스트법', edition: { effective_from: eff }, articles: [{ ref: '제5조', title: '난임치료휴가', body, section: '본칙' }, { ref: '제2조', title: '정의', body: eff === v2 ? '바뀐 정의' : '옛 정의', section: '본칙' }, ...extra] });
+  const calls = [];
+  const sources = {
+    rest: { search: async () => ({ rows: [] }) }, loadDoc: async () => null,
+    searchRegs: async (q) => { calls.push(q); return { rows: [{ doc_id: 'bylaws:ours', inst_name: '가공단', doc_title: '복무규정', art_ref: '제22조', art_title: '난임치료휴가', body: '난임치료휴가를 청구하면 휴가를 준다.' }] }; },
+    lawGo: { enabled: true, timeline: async () => [{ mst: '1', eff: v1 }, { mst: '2', eff: v2 }], textAt: async (mst, eff) => doc(mst === '2' ? '난임치료를 받는 근로자에게 휴가를 주어야 하며 분할 사용할 수 있다.' : '난임치료를 받는 근로자에게 휴가를 주어야 한다.', eff) },
+  };
+  const jobs = createJobs();
+  const j = await until(jobs, jobs.start('radar', { laws: ['테스트법'], inst: '가공단' }, runRadar, { deps: { sources, llm: null } }));
+  const it = j.result.items.find((x) => x.ref === '제5조');
+  assert.equal(it.affected.length, 1); assert.equal(it.affected[0].status, 'check');
+  assert.deepEqual(it.affected[0].amend.refs, ['제22조']); assert.equal(it.affected[0].amend.doc_id, 'bylaws:ours');
+  assert.match(it.affected[0].amend.intent, /테스트법 제5조\(난임치료휴가\) 개정/);
+  assert.ok(calls.every((q) => q.inst === '가공단')); assert.ok(!calls.some((q) => q.keyword === '정의'));
+  const all = createJobs();
+  const j2 = await until(all, all.start('radar', { laws: ['테스트법'] }, runRadar, { deps: { sources, llm: null } }));
+  assert.equal(j2.result.items.find((x) => x.ref === '제5조').affected.length, 0);
+});

@@ -8,6 +8,7 @@ import { kstToday } from '../lib/law-go.mjs';
 // 기관 유형별 기본 감시 법령
 const DEFAULT_LAWS = ['근로기준법', '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률', '공공기관의 운영에 관한 법률'];
 const DEFAULT_BY_TYPE = { 'local-gov': ['지방공무원법', '지방공무원 복무규정', '지방자치법'], 'central-ministry': ['국가공무원법', '국가공무원 복무규정', '행정절차법'] };
+const GENERIC = /^(정의|목적|벌칙|과태료|양벌규정|시행일|적용\s*범위|권한의\s*위임.*|위임|업무의\s*위탁.*|규제의\s*재검토|벌칙\s*적용에서.*)$/;
 const norm = (s) => String(s || '').replace(/[ㆍ·\s_]/g, '');
 const core = (s) => String(s || '').replace(/<[^>]*>|\[[^\]]*\]/g, '').replace(/\s+/g, '');
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
@@ -56,14 +57,24 @@ export async function runRadar(ctx) {
           const affected = [];
           // 지자체·부처는 자치법규·행정규칙(법제처) 본문에서 같은 주제를 찾는다
           const govT = input.org_type === 'local-gov' ? 'ordin' : input.org_type === 'central-ministry' ? 'admrul' : null;
-          if (ch.length) {
+          // 수치가 바뀐 조문은 모든 범위에서, 문구만 바뀐 조문은 우리 기관을 정했을 때만(전체 기관이면 너무 많다) 같은 주제 조문을 찾는다
+          // 정의·벌칙·과태료처럼 어느 규정에나 있는 제목은 문구 변경만으로는 찾지 않는다(엉뚱한 후보가 많아짐)
+          if (ch.length || (input.inst && !GENERIC.test(a.title || ''))) {
             try {
               const r = govT ? { rows: await govArticles(sources, govT, a.title, { org: input.inst || null, keep: (x) => x.body.replace(/\s+/g, '').includes(a.title.replace(/\s+/g, '').slice(0, 4)) }) } : await sources.searchRegs({ keyword: a.title, corpus: 'bylaws', body: true, inst: input.inst || undefined, limit: 30 });
-              for (const x of r.rows) { const jd = judge(x.body, ch, a.title, x.art_title || ''); if (jd.status !== 'reflected' && !/직접 정한 문장이 없습니다/.test(jd.reason)) affected.push({ inst: x.inst_name, doc_id: x.doc_id, doc_title: x.doc_title, ref: x.art_ref, title: x.art_title, status: jd.status, reason: jd.reason, excerpt: clip(x.body, 200), edition: editionLabel(x) }); }
+              const lawLine = `${nd.title || law} ${a.ref}(${a.title}) ${before ? '개정' : '신설'}(${ymd(sv.eff)} 시행${ch.length ? `: ${ch.map((c) => `${c.from}→${c.to}`).join(', ')}` : ''})`;
+              for (const x of r.rows) {
+                // 우리 쪽 조문도 목적·정의·부칙(적용례·경과조치) 같은 일반 조문은 후보에서 뺀다
+                if (!x.art_ref || x.section === '부칙' || GENERIC.test(x.art_title || '') || /적용례|경과조치|시행일/.test(x.art_title || '')) continue;
+                const jd = ch.length ? judge(x.body, ch, a.title, x.art_title || '') : { status: 'check', reason: '법령 문구가 바뀐 조문과 같은 주제를 정한 조문입니다. 바뀐 내용이 우리 규정에도 필요한지 확인하세요.' };
+                if (jd.status === 'reflected' || /직접 정한 문장이 없습니다/.test(jd.reason)) continue;
+                affected.push({ inst: x.inst_name, doc_id: x.doc_id, doc_title: x.doc_title, ref: x.art_ref, title: x.art_title, status: jd.status, reason: jd.reason, excerpt: clip(x.body, 200), edition: editionLabel(x), law_line: lawLine,
+                  amend: { doc_id: x.doc_id, refs: [x.art_ref], intent: `${lawLine}에 맞춰 ${x.art_ref}(${x.art_title || ''})를 고친다.`.slice(0, 600) } });
+              }
             } catch { errors.push(`${law} ${a.ref} 영향 검색`); }
           }
           affected.sort((p, q) => (p.status === 'candidate' ? 0 : 1) - (q.status === 'candidate' ? 0 : 1));
-          items.push({ via, law: nd.title || law, effective_from: sv.eff, ref: a.ref, title: a.title, before: clip(before, 400), after: clip(a.body, 400), changes: ch, kind: before ? '개정' : '신설', addenda, affected: affected.slice(0, 6) });
+          items.push({ via, law: nd.title || law, effective_from: sv.eff, ref: a.ref, title: a.title, before: clip(before, 1500), after: clip(a.body, 1500), changes: ch, kind: before ? '개정' : '신설', addenda, affected: affected.slice(0, 6) });
           found++;
         }
       }
@@ -75,7 +86,7 @@ export async function runRadar(ctx) {
   items.sort((a, b) => a.effective_from.localeCompare(b.effective_from));
   const plan = items.map((it) => `[${ymd(it.effective_from)} 시행] ${it.law} ${it.ref}(${it.title}) ${it.kind}${it.changes.length ? `: ${it.changes.map((c) => `${c.from}→${c.to}`).join(', ')}` : ''}\n  · 우리 규정 영향 ${it.affected.length}건(개정 후보 ${it.affected.filter((x) => x.status === 'candidate').length}) · ${it.effective_from <= kstToday() ? '이미 시행 중 — 바로 정비' : `착수 권장일 ${minus30(it.effective_from)}`}`).join('\n');
   const failLine = errors.length ? `\n\n⚠ 조회 실패: ${errors.join(', ')} — 해당 법령은 확인하지 못했습니다(없다는 뜻이 아님).` : '';
-  return { kind: '시행예정 레이더', laws, items, errors, as_of: { law_go: lawAsOf, checked: Date.now() }, plan_text: (plan || '정비할 시행예정 조문을 찾지 못했습니다(검색 범위 내).') + failLine, note: items.length ? `${laws.length}개 법령 · 시행예정 조문 ${items.length}개 · 판본 연혁 기반(전수 아님)` : '검색 범위 내 시행예정 판본 없음 또는 바뀐 조문 없음' };
+  return { kind: '시행예정 레이더', inst: input.inst || null, laws, items, errors, as_of: { law_go: lawAsOf, checked: Date.now() }, plan_text: (plan || '정비할 시행예정 조문을 찾지 못했습니다(검색 범위 내).') + failLine, note: items.length ? `${laws.length}개 법령 · 시행예정 조문 ${items.length}개 · 판본 연혁 기반(전수 아님)` : '검색 범위 내 시행예정 판본 없음 또는 바뀐 조문 없음' };
 }
 
 // 감시할 법령 제안: 법제처 「시행일 기준 법령」에서 최근 90일~앞으로 180일 사이에 시행되는(될) 판본을 모아,
