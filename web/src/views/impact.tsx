@@ -2,7 +2,7 @@
 import { DocLink } from '@/components/doc-viewer'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { HistoryIcon, CheckIcon, SparklesIcon } from 'lucide-react'
+import { HistoryIcon, CheckIcon, SparklesIcon, XIcon, ChevronDownIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { motion } from 'motion/react'
 import { ArrowRightIcon, DownloadIcon } from 'lucide-react'
@@ -60,6 +60,10 @@ export default function ImpactView() {
   const [sugg, setSugg] = useState<{ items: Sugg[]; note: string; disabled?: boolean } | null>(null)
   const [sbusy, setSbusy] = useState(false)
   const [edited, setEdited] = useState(false)
+  const [extra, setExtra] = useState('')
+  const [openG, setOpenG] = useState<string[]>([]); const [closedG, setClosedG] = useState<string[]>([])
+  // 시행일까지 남은 날(오늘 0)
+  const dday = (s: string) => Math.round((Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)) - Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) / 86400e3)
   useEffect(() => {
     let live = true; setSbusy(true)
     api('/api/radar/suggest', { method: 'POST', body: { org_type: profile.type } }).then((v) => { if (!live) return; setSugg(v); if (!edited && v.items?.length) setRlaws(v.items.slice(0, 3).map((x: Sugg) => x.law).join(', ')) }).catch(() => live && setSugg(null)).finally(() => live && setSbusy(false))
@@ -69,27 +73,58 @@ export default function ImpactView() {
   const toggleLaw = (law: string) => { setEdited(true); if (chosen.includes(law)) setRlaws(chosen.filter((x) => x !== law).join(', ')); else if (chosen.length >= 3) toast.info('한 번에 3개까지 비교합니다. 다른 법령을 먼저 빼 주세요.'); else setRlaws([...chosen, law].join(', ')) }
   // 자료 기준 시각(법제처에서 받은 때)
   const at = (ms?: number | null) => (ms ? new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '')
-  const md = (s: string) => `${s.slice(0, 4) === String(new Date().getFullYear()) ? '' : `${s.slice(0, 4)}. `}${+s.slice(4, 6)}. ${+s.slice(6, 8)}.`
   const rows = (r?.candidates || []).filter((c: any) => filter === 'all' || c.status === filter)
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader><CardTitle>시행예정 레이더</CardTitle><CardDescription>최근·곧 시행되는 법령 판본을 바로 앞 판본과 조문 단위로 비교해, 미리 정비할 기관 규정과 착수 권장일(시행 30일 전)을 정리합니다. 아래 제안은 법제처 자료로 자동으로 고르며, 법령명을 직접 넣어도 됩니다(3개까지).</CardDescription></CardHeader>
+        <CardHeader><CardTitle>시행예정 레이더</CardTitle><CardDescription>최근·곧 시행되는 법령을 직전 판본과 조문 단위로 비교해, 미리 고칠 우리 규정과 착수 권장일(시행 30일 전)을 알려 줍니다.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3">
-            <div className="flex items-center gap-1.5 text-sm font-medium"><SparklesIcon className="size-4 text-primary" />최근·곧 시행되는 관련 법령<span className="font-normal text-muted-foreground">— 눌러서 고르기(최대 3개)</span></div>
-            {sbusy && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />법제처에서 시행일 기준 법령을 찾는 중…</div>}
-            {sugg?.items?.length ? (
-              <div className="flex flex-wrap gap-1.5">{sugg.items.map((x) => { const on = chosen.includes(x.law); return (
-                <button key={x.law} type="button" aria-pressed={on} onClick={() => toggleLaw(x.law)} title={`${x.law} · ${x.kinds.join('·')} ${x.change} · 관련: ${x.why}`}
-                  className={`inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-left text-xs transition-colors pointer-coarse:min-h-10 ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
-                  {on && <CheckIcon className="size-3.5 shrink-0" />}<span className="font-medium">{x.law}</span>
-                  <span className={on ? 'opacity-80' : 'text-muted-foreground'}>{x.state === 'scheduled' ? `${md(x.eff)} 시행` : `${md(x.eff)} 시행됨`} · {x.why}{/타법/.test(x.change) ? ' · 타법개정' : ''}</span>
-                </button>) })}</div>
-            ) : !sbusy && <p className="text-xs text-muted-foreground">{sugg?.note || '제안을 불러오지 못했습니다. 법령명을 직접 넣어 주세요.'}</p>}
-            {sugg?.items?.length ? <p className="text-xs text-muted-foreground">{sugg.note}{(sugg as any).as_of ? ` · 법제처 자료 기준 ${at((sugg as any).as_of)}(12시간마다 새로 확인)` : ''}. 기관 유형(F11)에 맞춰 복무·인사·보수·계약·정보공개 등에 영향을 주는 법령을 골랐습니다(전수 아님).</p> : null}
+          {/* 감시할 법령: 시행일 순 목록(곧 시행 · 시행 예정 · 최근 시행), 고른 것은 아래 실행 줄에 칩으로 */}
+          <section className="overflow-hidden rounded-lg border">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-3 py-2">
+              <span className="flex items-center gap-1.5 text-sm font-semibold"><SparklesIcon className="size-4 text-primary" />살펴볼 법령</span>
+              <span className="text-xs text-muted-foreground">우리 기관 유형에 영향이 큰 법령 · 눌러서 최대 3개</span>
+              {(sugg as any)?.as_of && <span className="ml-auto text-xs text-muted-foreground">법제처 · {at((sugg as any).as_of)} 기준</span>}
+            </div>
+            {sbusy && <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground"><Spinner />법제처에서 시행일 기준 법령을 찾는 중…</div>}
+            {!sbusy && !sugg?.items?.length && <p className="p-4 text-sm text-muted-foreground">{sugg?.note || '제안을 불러오지 못했습니다. 아래에 법령명을 직접 넣어 주세요.'}</p>}
+            {sugg?.items?.length ? (() => {
+              const top = new Set(sugg.items.slice(0, 3).map((x) => x.law))
+              const groups: [string, Sugg[]][] = [['30일 안에 시행', sugg.items.filter((x) => x.state === 'scheduled' && dday(x.eff) <= 30)], ['시행 예정', sugg.items.filter((x) => x.state === 'scheduled' && dday(x.eff) > 30)], ['최근 시행', sugg.items.filter((x) => x.state === 'recent')]]
+              const shown = groups.filter(([, xs]) => xs.length)
+              return shown.map(([g, xs], gi) => { const open = !closedG.includes(g) && (openG.includes(g) || gi === 0 || xs.some((x) => chosen.includes(x.law))); return (
+                <div key={g} className="border-b last:border-b-0">
+                  <button type="button" aria-expanded={open} onClick={() => { if (open) { setClosedG([...closedG, g]); setOpenG(openG.filter((x) => x !== g)) } else { setOpenG([...openG, g]); setClosedG(closedG.filter((x) => x !== g)) } }} className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-semibold text-muted-foreground hover:text-foreground">
+                    <ChevronDownIcon className={`size-3.5 shrink-0 transition-transform ${open ? '' : '-rotate-90'}`} /><span className="shrink-0 whitespace-nowrap">{g} <span className="font-normal">{xs.length}</span></span>
+                    {!open && <span className="min-w-0 truncate font-normal">· {xs.map((x) => x.law).slice(0, 2).join(', ')}{xs.length > 2 ? ` 외 ${xs.length - 2}개` : ''}</span>}
+                  </button>
+                  {open && <ul className="grid grid-cols-1 gap-1 px-2 pb-2 md:grid-cols-2">
+                    {[...xs].sort((a, b) => a.eff.localeCompare(b.eff)).map((x) => { const on = chosen.includes(x.law), d = dday(x.eff); return (
+                      <li key={x.law} className="min-w-0"><button type="button" aria-pressed={on} onClick={() => toggleLaw(x.law)} title={`${x.law} · ${x.kinds.join('·')} ${x.change}`}
+                        className={`group flex w-full items-center gap-3 rounded-md border px-2 py-1.5 text-left transition-colors ${on ? 'border-primary/60 bg-primary/5' : 'border-transparent hover:border-border hover:bg-muted/50'}`}>
+                        <span className="w-12 shrink-0 text-center leading-tight">
+                          <span className={`block font-mono text-sm font-semibold tabular-nums ${x.state === 'recent' ? 'text-muted-foreground' : 'text-foreground'}`}>{x.eff.slice(4, 6)}.{x.eff.slice(6, 8)}</span>
+                          <span className={`block text-xs ${x.state === 'recent' ? 'text-muted-foreground' : d <= 30 ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>{x.state === 'recent' ? '시행 중' : x.eff.slice(0, 4) !== String(new Date().getFullYear()) ? x.eff.slice(0, 4) : `D-${d}`}</span>
+                        </span>
+                        <span aria-hidden="true" className="h-8 w-px shrink-0 bg-border" />
+                        <span className="min-w-0 flex-1">
+                          <span className="line-clamp-2 text-sm font-medium md:line-clamp-1">{x.law}</span>
+                          <span className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">{x.why}{/타법/.test(x.change) && <span className="rounded border px-1 text-[11px]">타법개정</span>}{top.has(x.law) && <span className="rounded bg-amber-100 px-1 text-[11px] font-medium text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">추천</span>}</span>
+                        </span>
+                        <span className={`grid size-5 shrink-0 place-items-center rounded-full border ${on ? 'border-primary bg-primary text-primary-foreground' : 'text-transparent group-hover:border-primary/60'}`}><CheckIcon className="size-3.5" /></span>
+                      </button></li>) })}
+                  </ul>}
+                </div>) })
+            })() : null}
+          </section>
+          <div className="flex flex-col gap-2 rounded-lg bg-muted/40 p-2.5 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">비교할 법령 {chosen.length}/3</span>
+              {chosen.map((x) => <span key={x} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/40 bg-background py-0.5 pl-2.5 pr-1 text-xs"><span className="truncate">{x}</span><button type="button" aria-label={`${x} 빼기`} onClick={() => toggleLaw(x)} className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"><XIcon className="size-3" /></button></span>)}
+              {chosen.length < 3 && <form className="min-w-40 flex-1" onSubmit={(e) => { e.preventDefault(); const v = extra.trim(); if (v) { toggleLaw(v); setExtra('') } }}><Input className="h-8 bg-background text-sm" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="직접 추가: 법령명 입력 후 Enter" /></form>}
+            </div>
+            <Button size="lg" className="px-4" disabled={radar.busy || !chosen.length} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: chosen.slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button>
           </div>
-          <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => { setEdited(true); setRlaws(e.target.value) }} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
           <JobTimeline job={radar.job} error={radar.error} startedAt={radar.startedAt} onAnswer={radar.answer} onRetry={radar.canRetry ? radar.retry : undefined} title="시행예정 레이더" />
           {rr && (
             <div className="flex flex-col gap-2">
