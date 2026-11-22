@@ -7,12 +7,14 @@ export function createCache({ dir = null, ttlMs = 24 * 3600 * 1000, max = 500 } 
   if (dir) mkdirSync(dir, { recursive: true });
   const file = (k) => join(dir, createHash('sha256').update(k).digest('hex').slice(0, 32) + '.json');
   return {
-    get(k) {
+    // ttl 을 주면 그 항목만 다른 유효 시간으로 본다(자주 바뀌는 목록은 짧게, 바뀌지 않는 판본 원문은 길게)
+    entry(k, ttl = ttlMs) {
       const e = mem.get(k);
-      if (e && e.t > Date.now() - ttlMs) { mem.delete(k); mem.set(k, e); return e.v; }
-      if (dir && existsSync(file(k))) { try { const d = JSON.parse(readFileSync(file(k), 'utf8')); if (d.t > Date.now() - ttlMs) { mem.set(k, d); return d.v; } } catch { /* 손상 캐시는 무시 */ } }
+      if (e && e.t > Date.now() - ttl) { mem.delete(k); mem.set(k, e); return e; }
+      if (dir && existsSync(file(k))) { try { const d = JSON.parse(readFileSync(file(k), 'utf8')); if (d.t > Date.now() - ttl) { mem.set(k, d); return d; } } catch { /* 손상 캐시는 무시 */ } }
       return undefined;
     },
+    get(k, ttl) { return this.entry(k, ttl)?.v; },
     set(k, v) {
       const e = { t: Date.now(), v }; mem.set(k, e);
       while (mem.size > max) mem.delete(mem.keys().next().value);

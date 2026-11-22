@@ -1,5 +1,6 @@
 // 흐름 공통: 근거 조사, 근거 표기, 오류
 import { keywords, clip, scoreArticle, lawNames } from '../lib/text.mjs';
+import { kstToday } from '../lib/law-go.mjs';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,7 +61,7 @@ export async function gatherEvidence(deps, { query, excludeDocId = null, regLimi
     const r = await sources.rest.search({ keyword: kws, corpus: 'legal', hybrid: true, limit: lawLimit });
     if (r.degraded) errors.push('ALIO 법령 검색 일부');
     // 본문이 쪽 번호·빈칸뿐인 조각(예: 「236」)은 근거로 쓰지 않는다
-    for (const x of r.rows.filter((y) => (String(y.body || '').match(/[가-힣]/g) || []).length >= 10).slice(0, lawLimit)) out.push({ kind: '관련 법령', label: `${x.doc_title} ${x.art_ref || ''}`.trim(), doc_id: x.doc_id, ref: x.art_ref, text: clip(x.body, 500), edition: editionLabel(x) });
+    for (const x of r.rows.filter((y) => (String(y.body || '').match(/[가-힣]/g) || []).length >= 10).slice(0, lawLimit)) out.push({ kind: '관련 법령', law: x.doc_title, label: `${x.doc_title} ${x.art_ref || ''}`.trim(), doc_id: x.doc_id, ref: x.art_ref, text: clip(x.body, 500), edition: editionLabel(x) });
   } catch { errors.push('ALIO 법령'); }
       return out; },
     async () => { const out = [];
@@ -73,7 +74,7 @@ export async function gatherEvidence(deps, { query, excludeDocId = null, regLimi
         const doc = await sources.loadDoc(hit.doc_id), kw = keywords(query);
         const kind = hit.doc_id.startsWith('law:law:') ? '법령(법제처)' : hit.doc_id.startsWith('law:ordin:') ? '자치법규(법제처)' : '행정규칙(법제처)';
         const top = doc.articles.filter((a) => a.ref).map((a) => [scoreArticle(a, kw), a]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]).slice(0, 2);
-        for (const [, a] of top) out.push({ kind, label: `${doc.title} ${a.ref}(${a.title})`, doc_id: doc.doc_id, ref: a.ref, text: clip(a.body, 600), edition: `현행 · 시행 ${doc.edition.effective_from || '미상'}` });
+        for (const [, a] of top) out.push({ kind, law: kind === '법령(법제처)' ? doc.title : undefined, label: `${doc.title} ${a.ref}(${a.title})`, doc_id: doc.doc_id, ref: a.ref, text: clip(a.body, 600), edition: `현행 · 시행 ${doc.edition.effective_from || '미상'}` });
       }
     } catch { errors.push('법제처'); }
   }
@@ -111,8 +112,38 @@ export async function gatherEvidence(deps, { query, excludeDocId = null, regLimi
       return out; },
   ].map((f) => f()));
   ev.push(...parts.flat());
+  if (useLawGo && sources.lawGo?.enabled) await checkLawsLive(sources, ev);
   ev.forEach((e, i) => { e.id = `E${i + 1}`; });
   return { evidence: ev, errors };
+}
+
+// 법령 근거를 법제처 현행 조문으로 확인한다: ALIO 사본이 옛 판본이면 현행 조문으로 바꾸고,
+// 그 조문이 곧(180일 안) 바뀌면 개정 후 조문과 시행일을 붙인다 — 초안이 곧 바뀔 법을 놓치지 않게. 실패하면 원래 근거를 그대로 쓴다
+const coreText = (t) => String(t || '').replace(/<[^>]*>|\[[^\]]*\]/g, '').replace(/[\s「」『』'"“”‘’]/g, '');
+export async function checkLawsLive(sources, ev, { today = kstToday(), max = 3 } = {}) {
+  const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  const horizon = (() => { const d = new Date(`${ymd(today)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 180); return d.toISOString().slice(0, 10).replace(/-/g, ''); })();
+  const targets = ev.filter((e) => e.law && e.ref && /^(관련 법령|법령\(법제처\))$/.test(e.kind)).slice(0, max);
+  await Promise.all(targets.map(async (e) => {
+    try {
+      const tl = await sources.lawGo.timeline(e.law); if (!tl.length) return;
+      const cur = [...tl].reverse().find((v) => v.eff <= today), next = tl.find((v) => v.eff > today && v.eff <= horizon);
+      if (!cur) return;
+      const art = (d) => d.articles.find((a) => a.ref === e.ref && a.section === '본칙');
+      const now = art(await sources.lawGo.textAt(cur.mst, cur.eff)); if (!now) return;
+      const stale = coreText(clip(now.body, 500)).slice(0, 120) !== coreText(e.text).slice(0, 120);
+      if (stale) { e.text = clip(now.body, 600); e.doc_id = `law:law:${cur.mst}`; }
+      e.edition = `현행 · 시행 ${ymd(cur.eff)}(법제처 확인${stale ? ' — 옛 사본을 현행으로 바꿈' : ''})`;
+      if (next) {
+        const after = art(await sources.lawGo.textAt(next.mst, next.eff));
+        if (after && coreText(after.body) !== coreText(now.body)) {
+          e.upcoming = { eff: next.eff, text: clip(after.body, 500) };
+          e.edition += ` · ${ymd(next.eff)} 개정 시행예정`;
+          e.text += `\n[참고: ${ymd(next.eff)} 시행 예정 개정 후 조문 — 아직 시행 전] ${clip(after.body, 400)}`;
+        }
+      }
+    } catch { /* 확인은 덧붙이는 것 — 실패해도 근거는 그대로 */ }
+  }));
 }
 
 // 항목들을 최대 n개씩 동시에 처리하고, 결과는 입력 순서대로 돌려준다(외부 조회 한도를 넘지 않게)
@@ -132,3 +163,5 @@ export async function govArticles(sources, target, keyword, { org = null, maxDoc
   return out;
 }
 
+// 체크리스트 문구: 근거 법령 조문이 곧 바뀌면 시행일·경과조치를 맞추라고 알린다
+export const upcomingChecks = (ev) => ev.filter((e) => e.upcoming).map((e) => `근거 [${e.id}] ${e.label}이(가) ${e.upcoming.eff.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')}부터 바뀔 예정입니다(법제처). 이번 개정에 미리 반영할지, 시행일·부칙 경과조치를 그 날짜에 맞출지 정하세요.`);

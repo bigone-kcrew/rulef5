@@ -4,7 +4,7 @@ import { renumber, corrections, findCiting, extractCitations, sameRegulation, mo
 import { buildComparison, amendmentText, splitParagraphs, josa } from '../lib/table.mjs';
 import { pickArticlesPrompt, amendPrompt } from './prompts.mjs';
 import { selfReview, tidyDeletedParagraphs, subjectOf } from './review.mjs';
-import { gatherEvidence, fail, editionLabel } from './common.mjs';
+import { gatherEvidence, fail, editionLabel, upcomingChecks } from './common.mjs';
 import { reasonDoc, addendaDoc, noticeDoc, checklistDoc, procedureDocs, regKindOf, consolidatedDoc } from './docset.mjs';
 import { parseRef } from '../lib/parse.mjs';
 import { caConflicts, caTable } from './ca-check.mjs';
@@ -336,6 +336,7 @@ export async function runAmend(ctx) {
       noChange ? `수정안이 현행과 같습니다(${noChange.refs.join(', ')}). 요청한 내용이 이미 규정에 들어 있는지 원문을 확인하고, 다른 내용을 바꾸려면 개정 의도를 고쳐 다시 만드세요.` : null,
       ...(noChange ? [] : same.map((c) => `${c.ref}: 수정안이 현행과 같습니다. 고칠 내용이 빠졌는지 확인하세요.`)),
       gateSkipped,
+      ...upcomingChecks(evidence),
       orgMismatch,
       ...offTopic,
       sibling ? `이 규정에는 해당 주제 조문이 없어 새 조문을 만들었습니다. 같은 기관 「${sibling.title}」 ${sibling.ref}(${sibling.art_title})에 이미 같은 주제가 있습니다 — 그 규정을 고치는 것이 맞는지, 이 규정은 그 규정을 따르도록 할지 확인하세요.` : null,

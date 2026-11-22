@@ -20,7 +20,7 @@ export async function runRadar(ctx) {
   let picked = Array.isArray(input.laws) && input.laws.length ? input.laws : null;
   if (!picked && sources.lawGo?.enabled) { try { const sg = await suggestLaws(sources, { org_type: input.org_type, limit: 3 }); if (sg.items.length) { picked = sg.items.map((x) => x.law); ctx.log(`감시 법령 자동 선택(법제처 시행일 기준): ${picked.join(', ')}`); } } catch { /* 기본 법령으로 */ } }
   const laws = (picked || DEFAULT_BY_TYPE[input.org_type] || DEFAULT_LAWS).map((x) => String(x).slice(0, 60)).slice(0, 3);
-  const items = [], errors = [];
+  const items = [], errors = []; let lawAsOf = null;
   for (const law of laws) {
     await ctx.step(`판본 비교 · ${law}`, async (s) => {
       let rows;
@@ -36,6 +36,7 @@ export async function runRadar(ctx) {
         const today = kstToday(), lo = shift(today, -90), hi = shift(today, 180);
         for (const name of [law, `${law.replace(/\s*(시행령|시행규칙)$/, '')} 시행령`]) {
           let tl; try { tl = await sources.lawGo.timeline(name); } catch { errors.push(`${name} 연혁(법제처)`); continue; }
+          if (tl.asOf) lawAsOf = Math.min(lawAsOf ?? tl.asOf, tl.asOf);
           const tgt = tl.filter((v) => v.eff >= lo && v.eff <= hi).slice(-2);
           pairs = tgt.map((v) => ({ v, prev: [...tl].reverse().find((p) => p.eff < v.eff) })).filter((x) => x.prev).map(({ v, prev }) => ({ eff: v.eff, load: () => Promise.all([sources.lawGo.textAt(v.mst, v.eff), sources.lawGo.textAt(prev.mst, prev.eff)]) }));
           if (pairs.length) { via = '법제처'; break; }
@@ -62,7 +63,7 @@ export async function runRadar(ctx) {
             } catch { errors.push(`${law} ${a.ref} 영향 검색`); }
           }
           affected.sort((p, q) => (p.status === 'candidate' ? 0 : 1) - (q.status === 'candidate' ? 0 : 1));
-          items.push({ law: nd.title || law, effective_from: sv.eff, ref: a.ref, title: a.title, before: clip(before, 400), after: clip(a.body, 400), changes: ch, kind: before ? '개정' : '신설', addenda, affected: affected.slice(0, 6) });
+          items.push({ via, law: nd.title || law, effective_from: sv.eff, ref: a.ref, title: a.title, before: clip(before, 400), after: clip(a.body, 400), changes: ch, kind: before ? '개정' : '신설', addenda, affected: affected.slice(0, 6) });
           found++;
         }
       }
@@ -74,7 +75,7 @@ export async function runRadar(ctx) {
   items.sort((a, b) => a.effective_from.localeCompare(b.effective_from));
   const plan = items.map((it) => `[${ymd(it.effective_from)} 시행] ${it.law} ${it.ref}(${it.title}) ${it.kind}${it.changes.length ? `: ${it.changes.map((c) => `${c.from}→${c.to}`).join(', ')}` : ''}\n  · 우리 규정 영향 ${it.affected.length}건(개정 후보 ${it.affected.filter((x) => x.status === 'candidate').length}) · ${it.effective_from <= kstToday() ? '이미 시행 중 — 바로 정비' : `착수 권장일 ${minus30(it.effective_from)}`}`).join('\n');
   const failLine = errors.length ? `\n\n⚠ 조회 실패: ${errors.join(', ')} — 해당 법령은 확인하지 못했습니다(없다는 뜻이 아님).` : '';
-  return { kind: '시행예정 레이더', laws, items, errors, plan_text: (plan || '정비할 시행예정 조문을 찾지 못했습니다(검색 범위 내).') + failLine, note: items.length ? `${laws.length}개 법령 · 시행예정 조문 ${items.length}개 · 판본 연혁 기반(전수 아님)` : '검색 범위 내 시행예정 판본 없음 또는 바뀐 조문 없음' };
+  return { kind: '시행예정 레이더', laws, items, errors, as_of: { law_go: lawAsOf, checked: Date.now() }, plan_text: (plan || '정비할 시행예정 조문을 찾지 못했습니다(검색 범위 내).') + failLine, note: items.length ? `${laws.length}개 법령 · 시행예정 조문 ${items.length}개 · 판본 연혁 기반(전수 아님)` : '검색 범위 내 시행예정 판본 없음 또는 바뀐 조문 없음' };
 }
 
 // 감시할 법령 제안: 법제처 「시행일 기준 법령」에서 최근 90일~앞으로 180일 사이에 시행되는(될) 판본을 모아,
@@ -111,5 +112,5 @@ export async function suggestLaws(sources, { org_type = 'public-institution', to
     const score = g.weight + (direct ? 2 : 0) + (next ? 1 : 0);
     return { law: g.law, why: g.why, eff: pick.eff, state: next ? 'scheduled' : 'recent', change: pick.change, kinds: [...new Set(g.versions.map((v) => v.kind))], versions: g.versions.slice(0, 6), score };
   }).sort((a, b) => b.score - a.score || a.eff.localeCompare(b.eff)).slice(0, limit);
-  return { items, note: `법제처 시행일 기준 법령 ${rows.length}건(${ymd(shift(today, -90))}~${ymd(shift(today, 180))}) 중 기관 규정과 관련이 큰 법령 ${items.length}개` };
+  return { items, as_of: Math.min(ahead.asOf ?? Date.now(), past.asOf ?? Date.now()), note: `법제처 시행일 기준 법령 ${rows.length}건(${ymd(shift(today, -90))}~${ymd(shift(today, 180))}) 중 기관 규정과 관련이 큰 법령 ${items.length}개` };
 }

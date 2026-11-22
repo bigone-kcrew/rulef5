@@ -51,3 +51,21 @@ test('radar falls back to 법제처 when ALIO has the scheduled version but noth
   const j = await until(jobs, jobs.start('radar', { laws: ['테스트법'] }, runRadar, { deps: { sources, llm: null } }));
   assert.equal(j.result.items.length, 1); assert.match(j.steps[0].note, /법제처 판본/);
 });
+
+import { checkLawsLive, upcomingChecks } from '../flows/common.mjs';
+test('law evidence is checked against the current 법제처 text and flags an upcoming change', async () => {
+  const today = '20261122';
+  const doc = (body) => ({ articles: [{ ref: '제18조의2', section: '본칙', title: '배우자 출산휴가', body }] });
+  const texts = { '1': '사업주는 10일의 휴가를 주어야 한다.', '2': '사업주는 20일의 휴가를 주어야 한다.', '3': '사업주는 25일의 휴가를 주어야 한다.' };
+  const sources = { lawGo: { enabled: true, timeline: async () => [{ mst: '1', eff: '20250101' }, { mst: '2', eff: '20260918' }, { mst: '3', eff: '20270101' }], textAt: async (mst) => doc(texts[mst]) } };
+  const ev = [{ id: 'E1', kind: '관련 법령', law: '남녀고용평등법', label: '남녀고용평등법 제18조의2', ref: '제18조의2', doc_id: 'legal:old', text: '사업주는 10일의 휴가를 주어야 한다.', edition: '현행' }, { id: 'E2', kind: '유사 규정', label: 'x', text: 'y' }];
+  await checkLawsLive(sources, ev, { today });
+  assert.match(ev[0].text, /^사업주는 20일/); assert.equal(ev[0].doc_id, 'law:law:2');
+  assert.match(ev[0].edition, /법제처 확인 — 옛 사본을 현행으로 바꿈/); assert.match(ev[0].edition, /2027-01-01 개정 시행예정/);
+  assert.equal(ev[0].upcoming.eff, '20270101'); assert.match(ev[0].text, /아직 시행 전\] 사업주는 25일/);
+  assert.equal(ev[1].upcoming, undefined);
+  assert.match(upcomingChecks(ev)[0], /\[E1\].*2027-01-01부터 바뀔 예정/);
+  const broken = [{ ...ev[0], text: '그대로', upcoming: undefined }];
+  await checkLawsLive({ lawGo: { enabled: true, timeline: async () => { throw new Error('down'); } } }, broken, { today });
+  assert.equal(broken[0].text, '그대로');
+});

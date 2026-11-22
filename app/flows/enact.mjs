@@ -7,7 +7,7 @@ import { refOf } from '../lib/parse.mjs';
 import { limit } from '../lib/llm.mjs';
 import { caConflicts, caTable } from './ca-check.mjs';
 import { outlinePrompt, enactChapterPrompt, enactMetaPrompt } from './prompts.mjs';
-import { gatherEvidence, fail, editionLabel } from './common.mjs';
+import { gatherEvidence, fail, editionLabel, upcomingChecks } from './common.mjs';
 import { reasonDoc, addendaDoc, noticeDoc, checklistDoc, procedureDocs } from './docset.mjs';
 
 const KINDS = ['규정', '규칙', '세칙', '지침', '요령', '훈령', '예규', '고시', '조례'];
@@ -203,6 +203,7 @@ export async function runEnact(ctx) {
     let ca = null;
     if (profile.alio_inst) { ca = { rows: [], errors: [], searched: false, ca: null }; for (const a of draft.articles.filter((x) => /\d+\s*(일|개월|시간|%|원)/.test(x.text)).slice(0, 3)) { const r = await caConflicts(sources, { inst: profile.alio_inst, topic: a.title, items: [{ ref: a.ref, text: a.text }] }); ca.rows.push(...r.rows); ca.errors.push(...r.errors); ca.searched ||= r.searched; ca.ca ||= r.ca; ca.ca_exists ||= r.ca_exists; } }
     const checks = [
+      ...upcomingChecks(evidence),
       ...review.remaining.map((x) => `자체 검토 후 남은 문제 — ${x}`),
       ...review.applied.map((x) => `자체 검토로 고친 점(대조 확인) — ${x.ref}: ${x.problem}`),
       ...draft.articles.filter((a) => a.empty).map((a) => `${a.ref}(${a.title}): 모델이 본문을 비워 두었습니다. 직접 작성하세요.`),

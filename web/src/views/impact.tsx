@@ -67,6 +67,8 @@ export default function ImpactView() {
   }, [profile.type]) // eslint-disable-line react-hooks/exhaustive-deps
   const chosen = rlaws.split(',').map((x) => x.trim()).filter(Boolean)
   const toggleLaw = (law: string) => { setEdited(true); if (chosen.includes(law)) setRlaws(chosen.filter((x) => x !== law).join(', ')); else if (chosen.length >= 3) toast.info('한 번에 3개까지 비교합니다. 다른 법령을 먼저 빼 주세요.'); else setRlaws([...chosen, law].join(', ')) }
+  // 자료 기준 시각(법제처에서 받은 때)
+  const at = (ms?: number | null) => (ms ? new Date(ms).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '')
   const md = (s: string) => `${s.slice(0, 4) === String(new Date().getFullYear()) ? '' : `${s.slice(0, 4)}. `}${+s.slice(4, 6)}. ${+s.slice(6, 8)}.`
   const rows = (r?.candidates || []).filter((c: any) => filter === 'all' || c.status === filter)
   return (
@@ -85,13 +87,13 @@ export default function ImpactView() {
                   <span className={on ? 'opacity-80' : 'text-muted-foreground'}>{x.state === 'scheduled' ? `${md(x.eff)} 시행` : `${md(x.eff)} 시행됨`} · {x.why}{/타법/.test(x.change) ? ' · 타법개정' : ''}</span>
                 </button>) })}</div>
             ) : !sbusy && <p className="text-xs text-muted-foreground">{sugg?.note || '제안을 불러오지 못했습니다. 법령명을 직접 넣어 주세요.'}</p>}
-            {sugg?.items?.length ? <p className="text-xs text-muted-foreground">{sugg.note}. 기관 유형(F11)에 맞춰 복무·인사·보수·계약·정보공개 등에 영향을 주는 법령을 골랐습니다(전수 아님).</p> : null}
+            {sugg?.items?.length ? <p className="text-xs text-muted-foreground">{sugg.note}{(sugg as any).as_of ? ` · 법제처 자료 기준 ${at((sugg as any).as_of)}(1시간마다 새로 확인)` : ''}. 기관 유형(F11)에 맞춰 복무·인사·보수·계약·정보공개 등에 영향을 주는 법령을 골랐습니다(전수 아님).</p> : null}
           </div>
           <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => { setEdited(true); setRlaws(e.target.value) }} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
           <JobTimeline job={radar.job} error={radar.error} startedAt={radar.startedAt} onAnswer={radar.answer} onRetry={radar.canRetry ? radar.retry : undefined} title="시행예정 레이더" />
           {rr && (
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted-foreground">{rr.note}{rr.errors?.length ? ` ⚠ 조회 실패: ${rr.errors.join(', ')}` : ''}</p>
+              <p className="text-sm text-muted-foreground">{rr.note}{rr.as_of?.law_go ? ` · 법제처 자료 기준 ${at(rr.as_of.law_go)}` : ''}{rr.items?.some((x: any) => x.via === 'ALIO') ? ' · 일부는 ALIO 법령 사본 기준' : ''}{rr.errors?.length ? ` ⚠ 조회 실패: ${rr.errors.join(', ')}` : ''}</p>
               {rr.items.map((it: any, i: number) => (
                 <div key={i} className="rounded-lg border p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2 font-medium"><Badge variant="outline">{it.effective_from.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')} 시행</Badge>{it.law} {it.ref}({it.title}) <span className="font-normal text-muted-foreground">{it.changes.map((c: any) => `${c.from}→${c.to}`).join(', ')}</span></div>

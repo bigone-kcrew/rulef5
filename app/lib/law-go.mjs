@@ -41,16 +41,19 @@ export function govJsonToDoc(d, target, id) {
 const effRow = (x) => ({ name: x['법령명한글'] || '', mst: String(x['법령일련번호'] || ''), law_id: x['법령ID'] || '', eff: String(x['시행일자'] || ''), anc: String(x['공포일자'] || ''), kind: x['법령구분명'] || '', change: x['제개정구분명'] || '', dept: x['소관부처명'] || '', state: x['현행연혁코드'] || '' });
 export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
 export function createLawGo({ oc = null, fetchImpl = fetch, cache = null } = {}) {
-  async function get(path, params) {
+  // 저장 시간: 목록(검색·시행일 목록·연혁)은 1시간 — 새 개정이 빨리 보이게, 판본 원문(MST·일련번호로 고정)은 7일
+  const HOUR = 3600e3, WEEK = 7 * 24 * HOUR;
+  async function getAt(path, params, ttl = path === 'lawService.do' ? WEEK : HOUR) {
     const url = `${BASE}/${path}?${new URLSearchParams({ OC: oc, type: 'JSON', ...params })}`;
     // 캐시 키에는 인증키(OC)를 넣지 않는다 — 공개 자료이므로 서버 키·사용자 키가 캐시를 함께 쓰고, 키가 메모리·디스크에 남지 않는다
     const key = `${BASE}/${path}?${new URLSearchParams({ type: 'JSON', ...params })}`;
-    const hit = cache?.get(key); if (hit !== undefined) return hit;
+    const hit = cache?.entry?.(key, ttl); if (hit !== undefined) return hit;
     const raw = await fetchJson(fetchImpl, url, { source: '법제처', timeoutMs: 30000 });
     // 응답의 상세링크에 인증키가 들어 있다(OC=…) — 캐시·화면으로 넘기기 전에 지운다
     const d = JSON.parse(JSON.stringify(raw).split(`OC=${encodeURIComponent(oc)}`).join('OC=').split(`OC=${oc}`).join('OC='));
-    cache?.set(key, d); return d;
+    cache?.set(key, d); return { t: Date.now(), v: d };
   }
+  const get = async (path, params) => (await getAt(path, params)).v;
   return {
     enabled: !!oc,
     // body: 본문 검색(search=2), page: 쪽 번호(1부터)
@@ -67,20 +70,22 @@ export function createLawGo({ oc = null, fetchImpl = fetch, cache = null } = {})
     // 시행일 기준 법령 목록(eflaw): from~to(YYYYMMDD) 사이에 시행되는(될) 법령 판본. 쪽마다 100건, 최대 pages 쪽
     async effective(from, to, { pages = 8, sort = 'efasc' } = {}) {
       if (!oc) return [];
-      const out = [];
+      const out = []; let asOf = Date.now();
       for (let page = 1; page <= pages; page++) {
-        const d = await get('lawSearch.do', { target: 'eflaw', efYd: `${from}~${to}`, display: 100, sort, ...(page > 1 ? { page } : {}) });
+        const { t, v: d } = await getAt('lawSearch.do', { target: 'eflaw', efYd: `${from}~${to}`, display: 100, sort, ...(page > 1 ? { page } : {}) });
+        asOf = Math.min(asOf, t);
         const xs = arr(d.LawSearch?.law); out.push(...xs.map(effRow));
         if (xs.length < 100) break;
       }
-      return out;
+      // 조회 기준 시각(저장본이면 처음 받은 때) — 화면에 「법제처 자료 기준」으로 보인다
+      return Object.assign(out, { asOf });
     },
     // 한 법령의 시행일별 판본 연혁(이름이 정확히 같은 것만, 오래된 순). 같은 판본(MST)이 시행일을 나눠 여러 번 나올 수 있다
     async timeline(name) {
       if (!oc) return [];
-      const d = await get('lawSearch.do', { target: 'eflaw', query: name, display: 100, sort: 'efdes' });
+      const { t, v: d } = await getAt('lawSearch.do', { target: 'eflaw', query: name, display: 100, sort: 'efdes' });
       const key = String(name).replace(/[ㆍ·\s]/g, '');
-      return arr(d.LawSearch?.law).map(effRow).filter((x) => x.name.replace(/[ㆍ·\s]/g, '') === key).reverse();
+      return Object.assign(arr(d.LawSearch?.law).map(effRow).filter((x) => x.name.replace(/[ㆍ·\s]/g, '') === key).reverse(), { asOf: t });
     },
     // 그 시행일에 적용되는(될) 법령 본문
     async textAt(mst, efYd) {
