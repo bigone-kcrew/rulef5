@@ -2,7 +2,7 @@
 import { keywords, scoreArticle, clip, normalizeArticle, fixTypos } from '../lib/text.mjs';
 import { renumber, corrections, findCiting, extractCitations, sameRegulation, moveRanges } from '../lib/refs.mjs';
 import { buildComparison, amendmentText, splitParagraphs, josa } from '../lib/table.mjs';
-import { pickArticlesPrompt, amendPrompt } from './prompts.mjs';
+import { pickArticlesPrompt, amendPrompt, SYS_BASE } from './prompts.mjs';
 import { selfReview, tidyDeletedParagraphs, subjectOf } from './review.mjs';
 import { gatherEvidence, fail, editionLabel, upcomingChecks } from './common.mjs';
 import { reasonDoc, addendaDoc, noticeDoc, checklistDoc, procedureDocs, regKindOf, consolidatedDoc } from './docset.mjs';
@@ -274,10 +274,20 @@ export async function runAmend(ctx) {
     const key = (c, i) => (c.op === 'insert' ? `신설${i + 1}` : c.ref);
     const items = live.map((c, i) => ({ ref: key(c, i), title: c.op === 'insert' ? c.title || '' : byRef.get(c.ref)?.title || '', old: c.op === 'insert' ? '' : byRef.get(c.ref)?.body || '', text: c.new_text }));
     const cited = evidence.filter((e) => live.some((c) => (c.basis_ids || []).includes(e.id)));
-    const r = await selfReview({ llm, sources, items, intent, evidence: [...new Set([...(cited.length ? cited : evidence.slice(0, 4)), ...evidence.filter((e) => e.upcoming)])], docText: main.map((a) => `${a.ref}(${a.title}) ${a.body}`).join('\n'), profile: input.profile || {}, kind: '개정' });
+    // 현행보다 불리해진 변경(혜택 감소·유급 축소·세부 기준 삭제)은 의도가 줄이라는 것이 아니면 되살리게 한다
+    const cut = /줄이|줄인|축소|감축|폐지|삭제|없앤|없애/.test(intent) ? [] : adverseChanges(live.filter((c) => c.op === 'amend').map((c) => ({ op: 'amend', ref: c.ref, title: byRef.get(c.ref)?.title || '', old: byRef.get(c.ref)?.body || '', new: c.new_text })));
+    const extraIssues = cut.map((a) => ({ ref: a.ref, kind: 'adverse', problem: `${a.ref}: 현행보다 직원에게 불리해졌습니다(${a.reasons.join(', ')}). 현행 규정이 법령보다 유리한 내용(세부 호·목, 유급 범위, 일수)은 그대로 두고, 법령 기준에 못 미치는 부분만 고친 본문을 쓰세요.` }));
+    const r = await selfReview({ llm, sources, items, intent, extraIssues, evidence: [...new Set([...(cited.length ? cited : evidence.slice(0, 4)), ...evidence.filter((e) => e.upcoming)])], docText: main.map((a) => `${a.ref}(${a.title}) ${a.body}`).join('\n'), profile: input.profile || {}, kind: '개정' });
     live.forEach((c, i) => { const t = r.fixed.get(key(c, i)); if (t) c.new_text = t; });
-    const label = (ref) => { const i = live.findIndex((c, k) => key(c, k) === ref); return i >= 0 && live[i].op === 'insert' ? `신설 조문(${live[i].title || ''})` : ref; };
+    const label = (ref) => { const i = live.findIndex((c, k) => key(c, k) === ref); return i >= 0 && live[i].op === 'insert' ? (live[i].title ? `신설 조문(${live[i].title})` : '신설 조문') : ref; };
     s.note(`코드가 찾은 문제 ${r.found.length}건 · 모델 검토로 고친 조문 ${r.applied.length}개${r.remaining.length ? ` · 남은 문제 ${r.remaining.length}건(체크리스트)` : ''}`);
+    // 검토로 본문이 바뀌었으면 개정 이유서·주요 내용을 최종 본문에 맞춰 한 번 다시 쓴다(이유서와 본문이 어긋나지 않게)
+    if (r.applied.length && llm) {
+      try {
+        const o = await llm.chatJson([{ role: 'system', content: SYS_BASE }, { role: 'user', content: JSON.stringify({ 과제: '최종 수정안에 맞춰 개정 이유(2~3문장)와 주요 내용(조문 번호 포함)을 다시 쓴다. 수정안 본문에 없는 수치·내용은 쓰지 않는다.', 개정의도: intent, 수정안: live.map((c, i) => ({ 조문: c.op === 'insert' ? `신설(${c.title || ''})` : c.ref, 현행: c.op === 'insert' ? '' : clip(byRef.get(c.ref)?.body || '', 1200), 개정안: clip(c.new_text, 1500) })), 출력형식: { reason_summary: '', main_points: [''] } }) }], (x) => { if (typeof x.reason_summary !== 'string' || !Array.isArray(x.main_points)) throw new Error('형식'); return x; }, { maxTokens: 1500 });
+        draft.reason_summary = o.reason_summary; draft.main_points = o.main_points.map(String).slice(0, 8);
+      } catch (e) { ctx.log(`개정 이유서 다시 쓰기 실패(${e.code || 'error'}) — 처음 이유서를 씁니다.`); }
+    }
     return { applied: r.applied.map((x) => `${label(x.ref)}: ${x.problem}`), remaining: r.remaining.map((x) => x.replace(/^신설\d+/, (m) => label(m))) };
   });
 

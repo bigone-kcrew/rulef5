@@ -100,7 +100,12 @@ export async function runAgent(ctx) {
     if (item.tool === 'get_article' && !/^제\s*\d+\s*조(의\s*\d+)?$/.test(String(item.args?.ref || '').trim())) { ctx.log('· 조문 번호가 정해지지 않아 조문 보기는 건너뜁니다.'); queue.splice(i, 1); i--; view(); continue; }
     // 할 일이 없는 단계(규정을 불러온 뒤의 질문, 의견 없이 의견 검토 등)는 진행 화면에 단계로 남기지 않는다
     const why = tool.skipIf?.(item.args || {}, st, ctx);
-    if (why) { ctx.log(`· ${TOOL_KO[item.tool] || item.tool} 건너뜀: ${why}`); queue.splice(i, 1); i--; view(); continue; }
+    if (why) {
+      ctx.log(`· ${TOOL_KO[item.tool] || item.tool} 건너뜀: ${why}`); queue.splice(i, 1);
+      // 묻기 대신 먼저 찾아본다: 계획에 규정 찾기·원문 불러오기가 없으면 그 자리에 넣는다
+      if (item.tool === 'ask_user' && !st.doc && !queue.some((x) => x.tool === 'search_regulations' && !x.done)) { const hp = heuristicParams(input.message, input.profile); queue.splice(i, 0, { tool: 'search_regulations', args: { inst: hp.inst, keyword: hp.regulation || hp.topic } }, ...(queue.some((x) => x.tool === 'load_document' && !x.done) ? [] : [{ tool: 'load_document', args: {} }])); }
+      i--; view(); continue;
+    }
     const key = item.tool + JSON.stringify(item.args);
     if (seen.has(key)) { ctx.log(`✗ 같은 호출 반복 차단: ${item.tool}`); item.skipped = true; view(); continue; }
     seen.add(key); executed++;

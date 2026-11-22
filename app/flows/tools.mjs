@@ -61,7 +61,13 @@ export const TOOLS = {
     async run(a, deps, st, ctx) {
       let id = str(a.doc_id, 1500) || ctx.input.doc_id || null;
       if (!id && st.candidates?.length) {
-        if (st.candidates.length > 1 && a.pick !== 'top' && !ctx.input.auto) {
+        // 요청 문장에 기관명과 규정 제목이 그대로 있고 그런 후보가 하나뿐이면 묻지 않고 그것을 연다(예: 「창업진흥원 복무규정」)
+        const flatM = String(ctx.input.message || '').replace(/[\s·ㆍ「」『』"']/g, '');
+        const named = st.candidates.filter((x) => { const t = String(x.doc_title || '').replace(/[\s·ㆍ]/g, ''); return t.length >= 2 && flatM.includes(t) && (!x.inst_name || flatM.includes(String(x.inst_name).replace(/\s/g, '')) || !/[가-힣]{2,}(공단|공사|진흥원|재단|센터|연구원|원)/.test(flatM)); });
+        const exact = named.filter((x) => !named.some((y) => y !== x && String(y.doc_title).length > String(x.doc_title).length && String(y.doc_title).includes(String(x.doc_title))));
+        // 같은 제목이 여러 판본이면 검색 1순위(현행 우선)를 쓴다
+        if (exact.length && exact.every((x) => x.doc_title === exact[0].doc_title && x.inst_name === exact[0].inst_name)) id = exact[0].doc_id;
+        else if (st.candidates.length > 1 && a.pick !== 'top' && !ctx.input.auto) {
           id = await ctx.gate({ id: 'pick_doc', prompt: '어느 규정을 대상으로 할까요?', options: st.candidates.slice(0, 6).map((x, i) => ({ doc_id: x.doc_id, ref: x.art_ref || null, value: x.doc_id, label: `${x.inst_name} 「${x.doc_title}」`, detail: `${x.doc_type || ''} · ${x.effective_from || ''} · 일치: ${x.art_ref || ''} ${x.art_title || ''}`, checked: i === 0 })) });
         } else id = st.candidates[0].doc_id;
       }
@@ -140,6 +146,7 @@ export const TOOLS = {
   },
   analyze_impact: {
     desc: '상위 법령 개정으로 영향받는 기관 규정 조문을 찾아 개정 후보를 판정한다. 법령명과 조문 번호(ref)를 주면 판본 연혁에서 개정 전·후를 자동으로 가져온다.', args: { law_name: '법령명', ref: '제N조(선택)', before_text: '개정 전 문구(선택)', after_text: '개정 후 문구(선택)', topic: '주제', inst: '기관명(선택)' },
+    skipIf: (a) => ((!str(a.before_text, 3000) || !str(a.after_text, 3000)) && !/^제\d+조(의\d+)?$/.test(str(a.ref, 20).replace(/\s/g, '')) ? '상위 법령 조문을 특정하지 못함(개정안 작성은 그대로 진행)' : null),
     async run(a, deps, st, ctx) {
       const run = deps.flows?.impact;
       if (!run) return { summary: '상위법 영향 기능이 연결되어 있지 않습니다.' };
@@ -191,7 +198,8 @@ export const TOOLS = {
   },
   ask_user: {
     desc: '판단이 필요할 때 사용자에게 묻는다(선택지 2~6개).', args: { question: '질문', options: '["선택지"]' },
-    skipIf: (a, st) => (st.doc ? '규정을 불러온 뒤에는 따로 묻지 않습니다' : null),
+    // 묻는 것은 찾아봐도 대상을 정할 수 없을 때만: 검색 전에는 묻지 않고, 문서 ID 같은 내부 값은 사용자에게 묻지 않는다
+    skipIf: (a, st) => (st.doc ? '규정을 불러온 뒤에는 따로 묻지 않습니다' : /문서\s*ID|doc_?id|아이디/i.test(String(a.question || '')) ? '문서 ID는 사용자에게 묻지 않습니다(검색으로 찾음)' : st.candidates === undefined && st.searchedAt === undefined ? '먼저 규정을 찾아본 뒤 필요할 때만 묻습니다' : null),
     async run(a, deps, st, ctx) {
       // 규정을 불러온 뒤 「조문 번호를 알려 달라」는 질문은 묻지 않는다 — 개정 흐름이 조문을 찾고 없으면 새 조문으로 둔다
       // 규정을 불러온 뒤에는 묻지 않는다 — 질문은 시작할 때(대상 규정을 특정할 수 없을 때)만. 이후 판단은 개정 흐름의 확인 화면에서 한 번에 받는다

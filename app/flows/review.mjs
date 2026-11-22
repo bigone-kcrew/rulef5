@@ -85,8 +85,9 @@ export function subjectOf(docText) {
 }
 // 「사업주」를 규정의 주어(기관장 또는 기관 약칭)로 바꾸고 조사를 맞춘다
 const swapSubject = (t, to) => String(t).replace(/사업주(는|가|를|와|로|에게|의|도)?/g, (_, j) => to + (j ? ({ 는: josa(to, '은', '는'), 가: josa(to, '이', '가'), 를: josa(to, '을', '를'), 와: josa(to, '과', '와'), 로: josa(to, '으로', '로') }[j] || j) : ''));
-export async function selfReview({ llm, sources, items, intent = '', evidence = [], docText = '', profile = {}, kind = '개정' }) {
-  const found = await detectIssues({ items, docText, profile, sources });
+export async function selfReview({ llm, sources, items, intent = '', evidence = [], docText = '', profile = {}, kind = '개정', extraIssues = [] }) {
+  // extraIssues: 부르는 쪽이 따로 찾은 문제(예: 현행보다 불리해진 변경) — 코드가 찾은 문제와 함께 모델에게 고치게 한다
+  const found = [...await detectIssues({ items, docText, profile, sources }), ...extraIssues];
   const fixed = new Map(), applied = [], rejected = [];
   if (llm && items.length) {
     try {
