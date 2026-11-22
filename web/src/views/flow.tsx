@@ -183,6 +183,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
           ) : cur.id === 'review' ? (
             <StepPanel key="review" title={`${idx + 1}. ${cur.title}`} hint={`「${title}」 ${flow.result?.docset.kind}안 — AI 초안입니다. 원문과 대조해 고치세요. 표와 본문은 눌러서 바로 고칠 수 있습니다.`}>
               <div className="flex flex-col gap-6">
+                {flow.result?.consent?.required && <Alert variant="destructive"><TriangleAlertIcon /><AlertTitle>근로자에게 불리한 변경 — 동의 절차가 필요합니다</AlertTitle><AlertDescription>{flow.result.consent.items.map((a: any) => `${a.ref}(${a.reasons.join(', ')})`).join('; ')}. 취업규칙(근로조건 규정)이면 근로자 과반수 노동조합(없으면 근로자 과반수)의 동의를 받아야 합니다(근로기준법 제94조제1항). 절차의 「근로자 의견 청취·노동조합 협의」 단계에서 동의서를 받으세요.</AlertDescription></Alert>}
                 {flow.result?.no_change && <Alert><TriangleAlertIcon /><AlertTitle>바꿀 곳이 없습니다</AlertTitle><AlertDescription><p>{flow.result.no_change.refs.join(', ')}의 수정안이 현행과 같습니다. 요청한 내용이 이미 규정에 들어 있을 수 있으니 원문을 확인하세요.</p><Button variant="outline" size="sm" className="mt-2" onClick={() => go('prepare')}><ArrowLeftIcon data-icon="inline-start" />개정 의도 고쳐 다시 만들기</Button></AlertDescription></Alert>}
                 <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4">
                   {([[mode === 'amend' ? '바뀌는 조문' : '조문', new Set((sec('comparison')?.rows || []).filter((r) => r.newHtml !== '(현행과 같음)').map((r) => r.ref)).size], ['대비표 행', sec('comparison')?.rows?.length || 0], ['근거 자료', (flow.result?.docset.evidence || []).filter((e: any) => !/^대상 규정/.test(e.label)).length], ['확인할 점', (sec('checklist')?.body || '').split('\n').filter((l) => l.startsWith('☐')).length]] as [string, number][]).map(([l, v], i) => <button type="button" key={l} title="눌러서 보기" onClick={() => { if (i < 2) { setRevTab('comparison'); jump('rv-docs') } else if (i === 2) { setEvOpen(true); jump('rv-ev') } else jump('rv-checks') }} className="group bg-card p-3 text-left transition-colors hover:bg-muted/60"><span className="flex items-center justify-between text-xs text-muted-foreground">{l}<ArrowRightIcon className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></span><span className="block font-mono text-2xl font-semibold tabular-nums">{v}</span></button>)}
@@ -217,8 +218,10 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                 const p = cur.proc
                 const forms = [...p.docs.filter((d: string) => FORMS.includes(d)), ...(p.id === 'consult' && sec('opinion_review') ? ['opinion_review'] : [])].filter((d: string) => sec(d))
                 const attach = p.docs.filter((d: string) => !FORMS.includes(d) && (sec(d) || d === 'evidence'))
+                const needConsent = p.id === 'labor' && !!flow.result?.consent?.required
                 return (
                   <div className="flex flex-col gap-6">
+                    {needConsent && <Alert variant="destructive"><TriangleAlertIcon /><AlertTitle>이번 개정은 근로자 동의가 필요합니다</AlertTitle><AlertDescription>불리한 변경으로 진행하기로 정했습니다({flow.result.consent.items.map((a: any) => `${a.ref}: ${a.reasons.join(', ')}`).join('; ')}). 취업규칙(근로조건 규정)이면 시행 전에 근로자 과반수로 조직된 노동조합(없으면 근로자 과반수)의 동의를 받아야 합니다(근로기준법 제94조제1항). 아래 「근로자 동의서」를 쓰세요.</AlertDescription></Alert>}
                     <section><h3 className="mb-2 font-semibold">이 단계에서 할 일</h3><ul className="flex flex-col gap-1.5 text-sm">{p.todo.map((t: string) => <li key={t} className="flex gap-2"><span className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />{t}</li>)}</ul></section>
                     {forms.length > 0 && (
                       <section className="flex flex-col gap-2">
@@ -247,7 +250,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
                       <Button variant="outline" onClick={() => go(steps[idx - 1].id)}><ArrowLeftIcon data-icon="inline-start" />이전</Button>
                       <div className="flex flex-wrap gap-2">
-                        {cur.optional && <Button variant="ghost" onClick={complete}>해당 없음 · 건너뛰기</Button>}
+                        {cur.optional && !(cur.proc?.id === 'labor' && flow.result?.consent?.required) && <Button variant="ghost" onClick={complete}>해당 없음 · 건너뛰기</Button>}
                         <Button size="lg" onClick={complete}>{idx === steps.length - 1 ? '절차 마치기' : '완료 · 다음 단계'}<ArrowRightIcon data-icon="inline-end" /></Button>
                       </div>
                     </div>

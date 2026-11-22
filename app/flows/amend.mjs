@@ -268,6 +268,7 @@ export async function runAmend(ctx) {
     return o;
   });
 
+  let consentChosen = false;
   // 자체 검토: 규정에 없던 법률 용어, 없는 법령명, 공무원 법령 인용, 항끼리 모순, 의도·근거 요건 누락을 찾아 고친다
   const review = await ctx.step('자체 검토', async (s) => {
     const live = draft.changes.filter((c) => c.op !== 'delete');
@@ -275,8 +276,26 @@ export async function runAmend(ctx) {
     const items = live.map((c, i) => ({ ref: key(c, i), title: c.op === 'insert' ? c.title || '' : byRef.get(c.ref)?.title || '', old: c.op === 'insert' ? '' : byRef.get(c.ref)?.body || '', text: c.new_text }));
     const cited = evidence.filter((e) => live.some((c) => (c.basis_ids || []).includes(e.id)));
     // 현행보다 불리해진 변경(혜택 감소·유급 축소·세부 기준 삭제)은 의도가 줄이라는 것이 아니면 되살리게 한다
-    const cut = /줄이|줄인|축소|감축|폐지|삭제|없앤|없애/.test(intent) ? [] : adverseChanges(live.filter((c) => c.op === 'amend').map((c) => ({ op: 'amend', ref: c.ref, title: byRef.get(c.ref)?.title || '', old: byRef.get(c.ref)?.body || '', new: c.new_text })));
-    const extraIssues = cut.map((a) => ({ ref: a.ref, kind: 'adverse', problem: `${a.ref}: 현행보다 직원에게 불리해졌습니다(${a.reasons.join(', ')}). 현행 규정이 법령보다 유리한 내용(세부 호·목, 유급 범위, 일수)은 그대로 두고, 법령 기준에 못 미치는 부분만 고친 본문을 쓰세요.` }));
+    // 현행보다 불리해진 변경(혜택 감소·유급 축소·세부 기준 삭제)이 있으면 담당자가 정한다:
+    //  · 유리한 내용 유지 → 자체 검토가 되살린다  · 불리한 변경으로 진행 → 되살리지 않고 근로자 동의 절차를 문서에 넣는다
+    // 「추천대로 진행」이면 의도가 줄이라는 것일 때만 불리한 변경으로, 아니면 유리한 내용 유지
+    const cut = adverseChanges(live.filter((c) => c.op === 'amend').map((c) => ({ op: 'amend', ref: c.ref, title: byRef.get(c.ref)?.title || '', old: byRef.get(c.ref)?.body || '', new: c.new_text })));
+    const wantsCut = /줄이|줄인|축소|감축|폐지|삭제|없앤|없애|하향|낮추|낮춘/.test(intent);
+    let keepFavorable = false;
+    if (cut.length) {
+      const list = cut.map((a) => `${a.ref}(${a.reasons.join(', ')})`).join('; ');
+      if (input.auto) keepFavorable = !wantsCut;
+      else {
+        const v = await ctx.gate({ id: 'adverse_choice', prompt: `수정안이 현행보다 직원에게 불리합니다: ${list}. 어느 쪽으로 할까요?`, multi: false, options: [
+          { value: 'keep', label: '현행보다 유리한 내용은 그대로 두고, 법 기준에 못 미치는 부분만 고치기', detail: '불리한 변경이 없으면 근로자 동의 없이 의견 청취로 진행할 수 있습니다.', checked: !wantsCut },
+          { value: 'cut', label: '불리한 변경으로 진행하기 — 근로자 동의 절차를 문서에 넣기', detail: '근로기준법 제94조제1항: 근로자 과반수로 조직된 노동조합(없으면 근로자 과반수)의 동의가 필요합니다(취업규칙·근로조건 규정인 경우).', checked: wantsCut },
+        ] });
+        keepFavorable = String([].concat(v)[0] || (wantsCut ? 'cut' : 'keep')) === 'keep';
+      }
+      consentChosen = !keepFavorable;
+      ctx.log(`· 불리한 변경 후보 ${cut.length}건 — ${keepFavorable ? '유리한 내용 유지(자체 검토가 되살림)' : '불리한 변경으로 진행(동의 절차 안내)'}`);
+    }
+    const extraIssues = keepFavorable ? cut.map((a) => ({ ref: a.ref, kind: 'adverse', problem: `${a.ref}: 현행보다 직원에게 불리해졌습니다(${a.reasons.join(', ')}). 현행 규정이 법령보다 유리한 내용(세부 호·목, 유급 범위, 일수)은 그대로 두고, 법령 기준에 못 미치는 부분만 고친 본문을 쓰세요.` })) : [];
     const r = await selfReview({ llm, sources, items, intent, extraIssues, evidence: [...new Set([...(cited.length ? cited : evidence.slice(0, 4)), ...evidence.filter((e) => e.upcoming)])], docText: main.map((a) => `${a.ref}(${a.title}) ${a.body}`).join('\n'), profile: input.profile || {}, kind: '개정' });
     live.forEach((c, i) => { const t = r.fixed.get(key(c, i)); if (t) c.new_text = t; });
     const label = (ref) => { const i = live.findIndex((c, k) => key(c, k) === ref); return i >= 0 && live[i].op === 'insert' ? (live[i].title ? `신설 조문(${live[i].title})` : '신설 조문') : ref; };
@@ -329,6 +348,8 @@ export async function runAmend(ctx) {
     const shortWarn = changes.filter((c) => c.op === 'amend' && c.old.length >= 400 && c.new.length < c.old.length * 0.6).map((c) => `${c.ref}: 수정안이 원문보다 크게 짧습니다. 항·호 누락 여부를 대조하세요.`);
     const paraLoss = changes.filter((c) => c.op === 'amend' && splitParagraphs(c.new).length < splitParagraphs(c.old).length).map((c) => `${c.ref}: 항 수가 줄었습니다(${splitParagraphs(c.old).length}→${splitParagraphs(c.new).length}). 의도한 삭제인지 확인하세요.`);
     const adverse = adverseChanges(changes);
+    // 담당자가 「불리한 변경으로 진행」을 골랐고(또는 줄이라는 의도) 최종안에도 불리한 변경이 남아 있으면 동의 절차가 필요하다
+    const consent = (consentChosen || /줄이|줄인|축소|감축|폐지|삭제|없앤|없애|하향|낮추|낮춘/.test(intent)) && adverse.length ? { required: true, items: adverse.map((a) => ({ ref: a.ref, reasons: a.reasons })) } : null;
     // 근거 없는 수치: 수정안의 「N일·N개월·N회…」가 현행 조문·개정 의도·근거 어디에도 없으면 AI가 정한 값으로 알린다
     const numTok = (t) => [...String(t || '').matchAll(/(\d+(?:\.\d+)?)\s*(일|개월|년|시간|회|퍼센트|%|만원|원|명|세)(?![가-힣]*조)/g)].map((m) => `${m[1]}${m[2]}`);
     const known = new Set([...numTok(intent), ...evidence.flatMap((e) => numTok(e.text)), ...changes.flatMap((c) => numTok(c.old)), ...main.flatMap((a) => numTok(a.body))]);
@@ -367,6 +388,7 @@ export async function runAmend(ctx) {
     const titled = main.filter((a) => topicWords.some((w) => String(a.title || '').includes(w)));
     const offTopic = absentTopic ? [] : changes.filter((c) => c.op === 'amend' && titled.length && !titled.some((a) => a.ref === c.ref) && !topicWords.some((w) => String(c.title || '').includes(w))).map((c) => `${c.ref}(${c.title}): 요청 주제와 제목이 맞는 조문(${titled.slice(0, 3).map((a) => `${a.ref} ${a.title}`).join(', ')})이 따로 있습니다. 고칠 조문이 맞는지 확인하세요.`);
     const checks = [
+      consent ? `【동의 필요】 근로자에게 불리한 변경입니다(${consent.items.map((a) => `${a.ref}: ${a.reasons.join(', ')}`).join('; ')}). 취업규칙(근로조건 규정)이면 시행 전에 근로자 과반수로 조직된 노동조합(없으면 근로자 과반수)의 동의를 받아야 합니다(근로기준법 제94조제1항). 동의 없이 불리하게 바꾸면 기존 근로자에게 효력이 없을 수 있습니다. 「근로자 의견 청취서·동의서」를 쓰세요.` : null,
       noChange ? `수정안이 현행과 같습니다(${noChange.refs.join(', ')}). 요청한 내용이 이미 규정에 들어 있는지 원문을 확인하고, 다른 내용을 바꾸려면 개정 의도를 고쳐 다시 만드세요.` : null,
       ...(noChange ? [] : same.map((c) => `${c.ref}: 수정안이 현행과 같습니다. 고칠 내용이 빠졌는지 확인하세요.`)),
       gateSkipped,
@@ -385,7 +407,7 @@ export async function runAmend(ctx) {
       ...invented,
       // 개정 이유서·주요 내용에 적힌 값이 수정안 본문에 없으면(문서끼리 어긋남) 알린다
       ...(() => { const body = changes.map((c) => c.new).join(' '); const said = [...new Set([draft.reason_summary, ...(draft.main_points || [])].flatMap((t) => numTok(t)))].filter((x) => !numTok(body).includes(x) && !numTok(changes.map((c) => c.old).join(' ')).includes(x)); return said.length ? [`개정 이유서·주요 내용에 적힌 값(${said.join(', ')})이 수정안 본문에 없습니다. 본문과 이유서 중 어느 쪽이 맞는지 맞추세요.`] : []; })(),
-      ...adverse.map((a) => `${a.ref}: 근로자에게 불리한 변경 가능성(${a.reasons.join(', ')}) — 근로기준법 제94조 동의 절차 확인`),
+      ...(consent ? [] : adverse).map((a) => `${a.ref}: 근로자에게 불리한 변경 가능성(${a.reasons.join(', ')}) — 근로기준법 제94조 동의 절차 확인`),
       ...shortWarn, ...paraLoss,
       doc.edition?.warning ? `대상 규정 판본: ${doc.edition.warning}` : null,
       evidence.length ? null : '근거 자료가 없습니다. 상위 법령·유사 규정을 직접 확인하세요.',
@@ -415,11 +437,11 @@ export async function runAmend(ctx) {
       { id: 'corrections', title: '인용 정정·영향 목록', body: corrText },
       ...(ca ? [{ id: 'ca_check', title: '단체협약 정합성', body: caTable(ca) }] : []),
       { id: 'checklist', title: '검토 체크리스트', body: checklistDoc(checks) },
-      ...procedureDocs({ profile: input.profile, title, regKind, kind: '개정', reasonSummary: draft.reason_summary, points: draft.main_points, labor: LABOR.test(`${doc.title} ${intent}`) && (!isGovDoc || /공무직|근로자|기간제|청원경찰|환경관리원/.test(`${doc.title} ${intent}`)), adverse }),
+      ...procedureDocs({ profile: input.profile, title, regKind, kind: '개정', reasonSummary: draft.reason_summary, points: draft.main_points, labor: !!consent || (LABOR.test(`${doc.title} ${intent}`) && (!isGovDoc || /공무직|근로자|기간제|청원경찰|환경관리원/.test(`${doc.title} ${intent}`))), adverse, consent: !!consent }),
     ];
     const ev = [{ label: `대상 규정 ${doc.inst || ''} ${title}`.trim(), doc_id: doc.doc_id, edition: editionLabel(doc) }, ...evidence.map((e) => ({ label: `[${e.id}] ${e.kind} ${e.label}`, doc_id: e.doc_id, ref: e.ref, edition: e.edition }))];
     s.note(`문서 ${sections.length}종 · 대비표 ${sections[1].rows.length}행`);
     try { ctx.metric?.('amend', { ops: changes.map((c) => c.op).join(','), absent_topic: !!absentTopic, sibling: !!sibling, evidence: evidence?.length ?? null, evidence_errors: errors?.length ?? null, review_applied: review?.applied?.length ?? null, review_rejected: review?.rejected?.length ?? null, review_remaining: review?.remaining?.length ?? null, dropped: draft.dropped?.length ?? 0, not_reflected: draft.not_reflected?.length ?? 0, checklist: checks.filter(Boolean).length, org_mismatch: !!orgMismatch, no_change: !!noChange }); } catch { /* 지표는 작업을 막지 않는다 */ }
-    return { sibling, no_change: noChange, kind: '개정', moves: moveRanges(fix.map), docset: { kind: '일부개정', title, sections, evidence: ev }, changes: allChanges, corrections: fix.corr, citing: fix.citing, model: llm.config, doc: { doc_id: doc.doc_id, title, inst: doc.inst }, docKeys: [...sections.map((x) => x.id), 'evidence'] };
+    return { sibling, no_change: noChange, consent, kind: '개정', moves: moveRanges(fix.map), docset: { kind: '일부개정', title, sections, evidence: ev }, changes: allChanges, corrections: fix.corr, citing: fix.citing, model: llm.config, doc: { doc_id: doc.doc_id, title, inst: doc.inst }, docKeys: [...sections.map((x) => x.id), 'evidence'] };
   });
 }

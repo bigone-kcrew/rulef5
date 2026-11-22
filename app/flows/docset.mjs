@@ -73,7 +73,7 @@ export function checklistDoc(items) {
 }
 
 // 절차 단계별 서식: 기관 유형에 맞춰 협조 공문·의견 청취서·검토 의뢰서·심의 안건·부의안·의회 제출안·공포(발령)문을 만든다
-export function procedureDocs({ profile = {}, title, kind, reasonSummary, points = [], labor = false, adverse = null, regKind = null }) {
+export function procedureDocs({ profile = {}, title, kind, reasonSummary, points = [], labor = false, adverse = null, regKind = null, consent = false }) {
   const type = profile.type || 'public-institution', org = profile.name || '○○기관', boss = headTitle(profile);
   const rk = regKind || regKindOf(title, type === 'local-gov' ? '조례' : type === 'central-ministry' ? '훈령' : '규정'), shortOrg = localShort(org);
   const year = new Date().getFullYear(), pts = points.length ? points.map((p, i) => `  ${i + 1}) ${p}`) : ['  (주요 내용 작성)'];
@@ -87,13 +87,13 @@ export function procedureDocs({ profile = {}, title, kind, reasonSummary, points
     '  다. 회신 방법: 의견이 없는 경우에도 "의견 없음"으로 회신', '',
     '붙임  1. ' + `${kindWord}안 1부.`, '      2. 신구조문대비표 1부.', `      3. ${kindWord} 이유서 1부.  끝.`, '', type === 'public-institution' ? `${org}${profile.approver ? ' ' + boss : ''}` : boss, '수신자  관계 부서(팀)장',
   ].join('\n') });
-  if (labor) out.push({ id: 'labor_opinion', title: '근로자 의견 청취서·동의서', body: [
-    `「${title}」 ${kindWord}에 관한 근로자 의견 청취서`, '',
+  if (labor) out.push({ id: 'labor_opinion', title: consent ? '근로자 동의서(불리한 변경)' : '근로자 의견 청취서·동의서', body: [
+    consent ? `「${title}」 ${kindWord}에 관한 근로자 동의서(근로자에게 불리한 변경)` : `「${title}」 ${kindWord}에 관한 근로자 의견 청취서`, '',
     `「근로기준법」 제94조에 따라 취업규칙(복무·보수 등 근로조건에 관한 규정 포함)을 작성·변경할 때에는 근로자 과반수로 조직된 노동조합(없으면 근로자 과반수)의 의견을 들어야 하며, 근로자에게 불리하게 변경하는 경우에는 동의를 받아야 합니다.`, '',
     `1. ${kindWord} 내용: ${reasonSummary || '(작성)'}`, ...pts,
-    '2. 근로자에게 불리한 변경 여부: □ 해당 없음  □ 해당(동의 필요) — 담당자 판단',
+    consent ? '2. 근로자에게 불리한 변경 여부: □ 해당 없음  ■ 해당(동의 필요) — 담당자가 불리한 변경으로 진행하기로 정함' : '2. 근로자에게 불리한 변경 여부: □ 해당 없음  □ 해당(동의 필요) — 담당자 판단',
     adverse?.length ? `   ※ 불리한 변경 후보: ${adverse.map((a) => `${a.ref}(${a.reasons.join(', ')})`).join('; ')} — 자동 탐지 결과이며 확정이 아닙니다.` : adverse ? '   ※ 자동 탐지된 불리한 변경 후보 없음(담당자 확인 필요)' : null,
-    '3. 의견:', '', '',
+    ...(consent ? ['3. 동의 여부: □ 동의함  □ 동의하지 않음', '   동의 방식: □ 근로자 과반수로 조직된 노동조합 대표의 동의  □ 근로자 과반수의 집단적 의사결정(회의 방식 등)', '   대상 근로자 수:     명 / 동의 근로자 수:     명', '4. 의견:', '', ''] : ['3. 의견:', '', '']),
     `${year}년  월  일`, '노동조합(근로자 과반수 대표)                (서명 또는 인)', '', '※ 불리한 변경 동의는 근로자 과반수로 조직된 노동조합 또는 근로자 과반수의 집단적 의사결정(회의 방식 등)으로 받아야 합니다.',
   ].filter((x) => x !== null).join('\n') });
   out.push({ id: 'legal_review', title: '법무 검토 의뢰서', body: [

@@ -145,6 +145,7 @@ export async function runAgent(ctx) {
   // 요약이 근거 자료에 없는 법령명을 말하면(모델 착오) 근거와 대조하라고 덧붙인다
   { const ev = (st.result?.docset?.evidence || []).map((e) => e.label).join(' ').replace(/[ㆍ·\s]/g, ''); const odd = ev ? lawNames(String(finalSummary || '')).filter((n) => !ev.includes(n.replace(/[ㆍ·\s]/g, ''))) : [];
     if (odd.length) finalSummary = `${finalSummary} (참고: 요약에 나온 「${odd.join('」·「')}」은(는) 이번 근거 자료에 없는 법령명입니다. 근거 자료의 법령을 확인하세요.)`; }
+  if (st.result?.consent?.required) finalSummary = `${finalSummary} 【동의 필요】 근로자에게 불리한 변경(${st.result.consent.items.map((a) => a.ref).join(', ')})이 있어, 취업규칙(근로조건 규정)이면 근로자 과반수 노동조합(없으면 근로자 과반수)의 동의를 받아야 합니다(근로기준법 제94조제1항).`;
   // 도구가 「사용자에게 알릴 것」으로 표시한 경고는 모델 요약에 빠져도 마지막 요약에 붙인다
   const warn = st.result?.sibling ? `참고: 이 규정에는 해당 조문이 없어 새 조문을 만들었습니다. 같은 기관 「${st.result.sibling.title}」 ${st.result.sibling.ref}(${st.result.sibling.art_title})에 이미 같은 주제가 있으니, 그 규정을 고치는 것이 맞는지 확인하세요.` : '';
   if (warn && !String(finalSummary).includes(st.result.sibling.title)) finalSummary = [finalSummary, warn].filter(Boolean).join(' ');
