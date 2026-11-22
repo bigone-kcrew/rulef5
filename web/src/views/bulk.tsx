@@ -32,7 +32,7 @@ export default function BulkView({ preset }: { preset?: { find?: string; rep?: s
           <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline"><ToggleGroupItem value="docs">규정 선택·업로드</ToggleGroupItem><ToggleGroupItem value="inst">{gov ? `우리 기관 ${word} 전체` : 'ALIO 기관 전체'}</ToggleGroupItem></ToggleGroup>
           {mode === 'docs' && usePreset && fromCheck ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm"><span className="text-muted-foreground">규정 점검에서 넘어온 규정:</span><b>{fromCheck.map((d) => d.title).join(', ')}</b><Button variant="ghost" size="xs" className="ml-auto" onClick={() => { setUsePreset(false); setPicked(null) }}>다른 규정 고르기</Button></div>
-          ) : mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : <InstPicker lazy type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시) — 법제처 자치법규' : '부처명(예: 고용노동부) — 법제처 행정규칙') : '기관명(ALIO 공시 기관명)'} />}
+          ) : mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : <InstPicker type={profile.type} value={inst} onPick={(_, t) => setInst(t)} placeholder={gov ? (profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시) — 법제처 자치법규' : '부처명(예: 고용노동부) — 법제처 행정규칙') : '기관명(ALIO 공시 기관명)'} />}
         </CardContent>
       </Card>
       <Card>

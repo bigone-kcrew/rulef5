@@ -1,6 +1,7 @@
 // 기관 고르기(자동완성): 이름 일부를 치면 기관 유형에 맞는 목록에서 후보를 보여 준다.
 // 공공기관 = ALIO 공시 목록(유형·주무부처), 중앙행정기관·지방자치단체 = 법제처 자료의 기관명. 목록에 없으면 입력한 이름을 그대로 쓴다.
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Input } from '@/components/ui/input'
 import { api, type Profile } from '@/lib/api'
 export type Inst = { name: string; type: string; ministry: string; sub?: string; head?: string }
@@ -15,11 +16,22 @@ export function InstPicker({ value, onPick, placeholder = '기관명을 입력�
     const t = setTimeout(() => { api<{ items: Inst[] }>(`/api/orgs?type=${type}&q=${encodeURIComponent(q.trim())}`).then((r) => { if (live) { setItems(r.items.map((x) => ({ ...x, type: x.type || '', ministry: x.ministry || '' }))); setAt(-1) } }).catch(() => live && setItems([])) }, 150)
     return () => { live = false; clearTimeout(t) }
   }, [q, open, type])
+  // 목록은 카드(overflow-hidden)에 잘리지 않게 화면 위에 띄운다(body 에 붙이고 입력칸 바로 아래에 고정).
+  // 대화상자 안에서는 바깥 클릭으로 창이 닫히지 않도록 원래 자리에 둔다
+  const box = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; top: number; width: number; up: boolean } | null>(null)
+  const inDialog = () => !!box.current?.closest('[role="dialog"]')
+  const place = () => { const el = box.current; if (!el || inDialog()) { setPos(null); return } const r = el.getBoundingClientRect(); const up = window.innerHeight - r.bottom < 220 && r.top > 260; setPos({ left: r.left, top: up ? r.top : r.bottom, width: r.width, up }) }
+  useLayoutEffect(() => {
+    if (!open) return
+    place(); window.addEventListener('scroll', place, true); window.addEventListener('resize', place)
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place) }
+  }, [open, items.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const choose = (x: Inst) => { setQ(x.name); setOpen(false); onPick(x, x.name) }
   // 입력을 마쳤을 때: 목록에 이름이 정확히 같은 기관이 있으면 그것을 고른 것으로 본다
   const commit = () => { if (!lazy || q === value) return; const hit = items.find((x) => x.name.replace(/\s+/g, '') === q.trim().replace(/\s+/g, '')); if (hit) choose(hit); else onPick(null, q.trim()) }
   return (
-    <div className="relative">
+    <div ref={box} className="relative">
       <Input id={id} value={q} placeholder={placeholder} maxLength={60} autoComplete="off" role="combobox" aria-expanded={open && items.length > 0} aria-autocomplete="list"
         onFocus={() => setOpen(true)} onBlur={() => { setTimeout(() => setOpen(false), 150); commit() }}
         onChange={(e) => { setQ(e.target.value); setOpen(true); if (!lazy) onPick(null, e.target.value) }}
@@ -33,11 +45,14 @@ export function InstPicker({ value, onPick, placeholder = '기관명을 입력�
           else if (e.key === 'Enter' && at >= 0) { e.preventDefault(); choose(items[at]) }
           else if (e.key === 'Escape') setOpen(false)
         }} />
-      {open && items.length > 0 && (
-        <ul role="listbox" className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-popover p-1 text-sm shadow-md">
-          {items.map((x, i) => <li key={x.name} role="option" aria-selected={i === at}><button type="button" tabIndex={-1} className={`flex w-full flex-col items-start rounded px-2 py-1.5 text-left hover:bg-muted ${i === at ? 'bg-muted' : ''}`} onMouseDown={(e) => { e.preventDefault(); choose(x) }}><span className="font-medium">{x.name}</span><span className="text-xs text-muted-foreground">{x.sub || `${x.type} · ${x.ministry}`}</span></button></li>)}
-        </ul>
-      )}
+      {open && items.length > 0 && (() => {
+        const list = (
+          <ul role="listbox" style={pos ? { position: 'fixed', left: pos.left, width: pos.width, ...(pos.up ? { bottom: window.innerHeight - pos.top + 4 } : { top: pos.top + 4 }) } : undefined}
+            className={`${pos ? 'z-50' : 'absolute z-20 mt-1 w-full'} max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-sm shadow-lg`}>
+            {items.map((x, i) => <li key={x.name} role="option" aria-selected={i === at}><button type="button" tabIndex={-1} className={`flex w-full flex-col items-start rounded px-2 py-1.5 text-left hover:bg-muted pointer-coarse:py-2.5 ${i === at ? 'bg-muted' : ''}`} onMouseDown={(e) => { e.preventDefault(); choose(x) }}><span className="font-medium">{x.name}</span><span className="text-xs text-muted-foreground">{x.sub || `${x.type} · ${x.ministry}`}</span></button></li>)}
+          </ul>)
+        return pos ? createPortal(list, document.body) : list
+      })()}
     </div>
   )
 }
