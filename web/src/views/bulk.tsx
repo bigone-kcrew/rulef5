@@ -1,7 +1,7 @@
 // 일괄 개정: 여러 규정의 같은 낱말을 한꺼번에(바꿀 곳마다 사람 확인, 조사 자동 보정, 부칙·「」 제외)
 import { useState } from 'react'
 import { ArrowRightIcon } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -14,9 +14,11 @@ import { InstPicker } from '@/components/inst-picker'
 import { useApp } from '@/lib/app-state'
 import { useJob } from '@/hooks/use-job'
 import { StepTitle } from '@/components/keycap'
+import { ResetButton, withReset } from '@/components/reset-button'
 
 // preset: F8 규정 점검의 「일괄 개정으로 통일」에서 찾을 말·바꿀 말·대상 규정을 넘겨받는다
-export default function BulkView({ preset }: { preset?: { find?: string; rep?: string; docs?: { doc_id: string; title: string }[] } | null }) {
+export default withReset(BulkView)
+function BulkView({ preset, onReset }: { preset?: { find?: string; rep?: string; docs?: { doc_id: string; title: string }[] } | null; onReset: () => void }) {
   const { profile } = useApp(); const gov = profile.type !== 'public-institution', word = profile.type === 'local-gov' ? '자치법규' : '행정규칙'
   const fromCheck = preset?.docs?.length ? preset.docs : null
   const [mode, setMode] = useState('docs'); const [inst, setInst] = useState(gov ? (/^예시 /.test(profile.name) ? '' : profile.name) : profile.alio_inst || ''); const [picked, setPicked] = useState<Picked | null>(fromCheck ? { doc: { doc_id: fromCheck[0].doc_id } as any, uploads: fromCheck.map((d) => d.doc_id), refs: [] } : null)
@@ -27,7 +29,7 @@ export default function BulkView({ preset }: { preset?: { find?: string; rep?: s
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader><StepTitle n={1}>대상 규정</StepTitle><CardDescription>바꿀 규정 묶음을 올리거나 ALIO 기관 전체를 고릅니다.</CardDescription></CardHeader>
+        <CardHeader><StepTitle n={1}>대상 규정</StepTitle>{(picked || find || rep || job.startedAt) && <CardAction><ResetButton onClick={() => { job.reset(); onReset() }} /></CardAction>}<CardDescription>바꿀 규정 묶음을 올리거나 ALIO 기관 전체를 고릅니다.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
           <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline"><ToggleGroupItem value="docs">규정 선택·업로드</ToggleGroupItem><ToggleGroupItem value="inst">{gov ? `우리 기관 ${word} 전체` : 'ALIO 기관 전체'}</ToggleGroupItem></ToggleGroup>
           {mode === 'docs' && usePreset && fromCheck ? (

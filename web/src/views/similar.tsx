@@ -17,6 +17,7 @@ import { useApp } from '@/lib/app-state'
 import { api } from '@/lib/api'
 import { download, tableCsv } from '@/lib/export'
 import { goTab } from '@/App'
+import { ResetButton, withReset } from '@/components/reset-button'
 
 // 예시 주제: 그 유형의 규정이 실제로 정하는 사항(공무원 휴가 일수 등은 대통령령이 정하므로 조례·훈령 예시에서 뺀다)
 const TOPICS: Record<string, string[]> = { 'public-institution': ['배우자 출산휴가', '육아휴직 기간', '출장 복명서 제출 기한', '병가 일수', '징계 시효'], 'local-gov': ['당직 근무', '공무직 배우자 출산휴가', '시간외근무', '출장 복명', '포상 추천'], 'central-ministry': ['공무직 배우자 출산휴가', '당직 근무', '재택근무', '출장 복명', '보안 점검'] }
@@ -42,7 +43,8 @@ const SCOPES: Record<string, Scope[]> = {
     ['all', '전체', () => '모든 중앙행정기관의 행정규칙에서 주제에 맞는 조문을 찾아 비교합니다.', false],
   ],
 }
-export default function SimilarView() {
+export default withReset(SimilarView)
+function SimilarView({ onReset }: { onReset: () => void }) {
   const { profile } = useApp()
   const scopes = SCOPES[profile.type] || SCOPES['public-institution']
   const [mineText, setMineText] = useState(profile.type === 'public-institution' ? profile.alio_inst || '' : /^예시 /.test(profile.name) ? '' : profile.name)
@@ -62,7 +64,8 @@ export default function SimilarView() {
   const why = !topic.trim() ? '비교할 주제를 적으세요' : needMine && !mine ? '우리 기관을 목록에서 고르세요' : scope === 'picked' && !picked.length ? '비교할 기관을 추가하세요' : ''
   return (
     <div className="flex flex-col gap-4">
-      <section className="flex flex-col gap-6 rounded-lg border bg-card p-4 sm:p-6">
+      <section className="relative flex flex-col gap-6 rounded-lg border bg-card p-4 sm:p-6">
+        {(topic || picked.length > 0 || job.startedAt) && <ResetButton className="absolute right-3 top-3" onClick={() => { job.reset(); onReset() }} />}
         <div className="grid gap-6 md:grid-cols-2">
           <div className="flex flex-col gap-3">
             <StepTitle n="A">우리 기관</StepTitle>

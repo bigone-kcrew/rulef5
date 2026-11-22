@@ -2,7 +2,7 @@
 import { DocLink } from '@/components/doc-viewer'
 import { useState } from 'react'
 import { ArrowRightIcon, DownloadIcon } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,11 +17,13 @@ import { useApp } from '@/lib/app-state'
 import { useJob } from '@/hooks/use-job'
 import { download, tableCsv } from '@/lib/export'
 import { goTab } from '@/App'
+import { ResetButton, withReset } from '@/components/reset-button'
 import { StepTitle } from '@/components/keycap'
 
 const TYPE: Record<string, string> = { broken_ref: '인용 오류', term: '용어 혼용', conflict: '수치 충돌 후보', missing_reg: '규정 누락 확인' }
 const SEV: Record<string, string> = { high: '높음', mid: '보통', check: '확인' }
-export default function CheckView() {
+export default withReset(CheckView)
+function CheckView({ onReset }: { onReset: () => void }) {
   const { profile } = useApp()
   const gov = profile.type !== 'public-institution', word = profile.type === 'local-gov' ? '자치법규' : profile.type === 'central-ministry' ? '행정규칙' : '내규'
   const [mode, setMode] = useState('docs'); const [inst, setInst] = useState(gov ? (/^예시 /.test(profile.name) ? '' : profile.name) : profile.alio_inst || ''); const [kw, setKw] = useState(''); const [picked, setPicked] = useState<Picked | null>(null)
@@ -36,7 +38,7 @@ export default function CheckView() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader><StepTitle n={1}>점검할 규정</StepTitle><CardDescription>여러 규정을 고르면 서로의 인용도 함께 봅니다. 기관 전체 모드는 {gov ? `법제처 국가법령정보의 그 기관 ${word}` : 'ALIO에 공시된 그 기관 규정'}(최대 30개)을 한꺼번에 점검합니다.</CardDescription></CardHeader>
+        <CardHeader><StepTitle n={1}>점검할 규정</StepTitle>{(picked || job.startedAt) && <CardAction><ResetButton onClick={() => { job.reset(); onReset() }} /></CardAction>}<CardDescription>여러 규정을 고르면 서로의 인용도 함께 봅니다. 기관 전체 모드는 {gov ? `법제처 국가법령정보의 그 기관 ${word}` : 'ALIO에 공시된 그 기관 규정'}(최대 30개)을 한꺼번에 점검합니다.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
           <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline"><ToggleGroupItem value="docs">규정 선택·업로드</ToggleGroupItem><ToggleGroupItem value="inst">{gov ? `우리 기관 ${word} 전체` : 'ALIO 기관 전체'}</ToggleGroupItem></ToggleGroup>
           {mode === 'docs' ? <TargetPicker onChange={setPicked} multi /> : (

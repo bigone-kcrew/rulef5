@@ -8,7 +8,7 @@ import { MoreTrigger } from '@/components/more-trigger'
 import { api } from '@/lib/api'
 import { motion } from 'motion/react'
 import { ArrowRightIcon, DownloadIcon } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -23,13 +23,15 @@ import { InstPicker } from '@/components/inst-picker'
 import { useApp } from '@/lib/app-state'
 import { useJob } from '@/hooks/use-job'
 import { goTab } from '@/App'
+import { ResetButton, withReset } from '@/components/reset-button'
 import { download, tableCsv } from '@/lib/export'
 import { StepTitle } from '@/components/keycap'
 
 const EX = { law: '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률 제18조의2', before: '① 사업주는 근로자가 배우자의 출산을 이유로 휴가를 청구하는 경우에 10일의 휴가를 주어야 한다. 이 경우 사용한 휴가기간은 유급으로 한다.\n③ 배우자 출산휴가는 근로자의 배우자가 출산한 날부터 90일이 지나면 청구할 수 없다.', after: '① 사업주는 근로자가 배우자의 출산을 이유로 휴가를 청구하는 경우에 20일의 휴가를 주어야 한다. 이 경우 사용한 휴가기간은 유급으로 한다.\n③ 배우자 출산휴가는 근로자의 배우자가 출산한 날부터 120일이 지나면 청구할 수 없다.', topic: '배우자 출산휴가' }
 const ymdDot = (s: string) => s.replace(/(\d{4})(\d{2})(\d{2})/, '$1. $2. $3.')
 const LABEL: Record<string, string> = { candidate: '개정 후보', check: '확인 필요', reflected: '반영됨' }
-export default function ImpactView() {
+export default withReset(ImpactView)
+function ImpactView({ onReset }: { onReset: () => void }) {
   const [law, setLaw] = useState(''); const [before, setBefore] = useState(''); const [after, setAfter] = useState(''); const [topic, setTopic] = useState('')
   const { profile } = useApp(); const gov = profile.type !== 'public-institution'
   const [inst, setInst] = useState(gov ? (/^예시 /.test(profile.name) ? '' : profile.name) : profile.alio_inst || '')
@@ -81,7 +83,7 @@ export default function ImpactView() {
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader><StepTitle n={1}>바뀌는 법령 고르기</StepTitle><CardDescription>최근·곧 시행되는 법령 가운데 우리 기관 유형에 영향이 큰 것을 골라 두었습니다. 그대로 두거나 바꾸세요.</CardDescription></CardHeader>
+        <CardHeader><StepTitle n={1}>바뀌는 법령 고르기</StepTitle>{(edited || radar.startedAt || job.startedAt || law || before || after) && <CardAction><ResetButton onClick={() => { radar.reset(); job.reset(); onReset() }} /></CardAction>}<CardDescription>최근·곧 시행되는 법령 가운데 우리 기관 유형에 영향이 큰 것을 골라 두었습니다. 그대로 두거나 바꾸세요.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
           {/* 감시할 법령: 시행일 순 목록(곧 시행 · 시행 예정 · 최근 시행), 고른 것은 아래 실행 줄에 칩으로 */}
           <section className="overflow-hidden rounded-lg border">

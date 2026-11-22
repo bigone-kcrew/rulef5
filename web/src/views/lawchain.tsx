@@ -12,13 +12,15 @@ import { useApp } from '@/lib/app-state'
 import { useJob } from '@/hooks/use-job'
 import { api, type Doc } from '@/lib/api'
 import { goTab } from '@/App'
+import { ResetButton, withReset } from '@/components/reset-button'
 
 type Tier = { doc_id: string; title: string; source?: string; date?: string } | null
 type Family = { base: string | null; tiers: { law: Tier; decree: Tier; rule: Tier; decree_more?: { title: string }[] }; others: { title: string }[] }
 const TIERS: ['law' | 'decree' | 'rule', string][] = [['law', '법률'], ['decree', '시행령'], ['rule', '시행규칙']]
 const Arrow = () => <><ChevronRightIcon className="hidden size-5 shrink-0 self-center text-muted-foreground md:block" /><ChevronDownIcon className="size-5 shrink-0 self-center text-muted-foreground md:hidden" /></>
 
-export default function LawChainView() {
+export default withReset(LawChainView)
+function LawChainView({ onReset }: { onReset: () => void }) {
   const { profile } = useApp(); const gov = profile.type !== 'public-institution', named = !/^예시 /.test(profile.name)
   const [name, setName] = useState(''); const [fam, setFam] = useState<Family | null>(null); const [doc, setDoc] = useState<Doc | null>(null)
   const [ref, setRef] = useState(''); const [filter, setFilter] = useState(''); const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false)
@@ -38,7 +40,7 @@ export default function LawChainView() {
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-6 rounded-lg border bg-card p-4 sm:p-6">
         <div className="flex flex-col gap-3">
-          <StepTitle n={1}>법령 찾기</StepTitle>
+          <div className="flex items-center justify-between gap-2"><StepTitle n={1}>법령 찾기</StepTitle>{(name || fam || job.startedAt) && <ResetButton onClick={() => { job.reset(); onReset() }} />}</div>
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); find() }}>
             <Input className="min-w-48 flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="법률 이름(예: 근로기준법, 남녀고용평등법)" maxLength={80} />
             <Button type="submit" disabled={busy || !name.trim()}>{busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
