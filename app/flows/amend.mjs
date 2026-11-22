@@ -3,16 +3,23 @@ import { keywords, scoreArticle, clip, normalizeArticle, fixTypos } from '../lib
 import { renumber, corrections, findCiting, extractCitations, sameRegulation, moveRanges } from '../lib/refs.mjs';
 import { buildComparison, amendmentText, splitParagraphs, josa } from '../lib/table.mjs';
 import { pickArticlesPrompt, amendPrompt, SYS_BASE } from './prompts.mjs';
-import { selfReview, tidyDeletedParagraphs, subjectOf } from './review.mjs';
+import { selfReview, tidyDeletedParagraphs, subjectOf, judgeAdverse } from './review.mjs';
 import { gatherEvidence, fail, editionLabel, upcomingChecks } from './common.mjs';
 import { reasonDoc, addendaDoc, noticeDoc, checklistDoc, procedureDocs, regKindOf, consolidatedDoc } from './docset.mjs';
 import { parseRef } from '../lib/parse.mjs';
 import { caConflicts, caTable } from './ca-check.mjs';
 
 const LABOR = /(복무|휴가|휴직|근무|보수|임금|수당|징계|해고|취업|인사|근로)/;
+const CUT_INTENT = /줄이|줄인|축소|감축|폐지|삭제|없앤|없애|하향|낮추|낮춘|강화|의무화|승인을\s*받|허가를\s*받|제한(하|을|한)/;
 
 // A3 불이익 변경 가능성(규칙): 혜택 수치 감소, 부담 수치 증가, '할 수 있다'→'하여야 한다', 혜택 조문 삭제
 const BENEFIT = /(휴가|수당|임금|보수|휴직|급여|상여|포상|지원금|일수|연가|보상)/, BURDEN = /(징계|정직|감봉|근무시간|근로시간|시간외|당직|대기)/;
+// 규칙 판정과 AI 판정을 조문별로 합친다(AI 이유는 「AI:」로 구분)
+export function mergeAdverse(rule, ai) {
+  const by = new Map(rule.map((a) => [a.ref, { ref: a.ref, reasons: [...a.reasons] }]));
+  for (const a of ai || []) { const g = by.get(a.ref) || { ref: a.ref, reasons: [] }; for (const r of a.reasons) g.reasons.push(`AI: ${r}`); by.set(a.ref, g); }
+  return [...by.values()].filter((a) => a.reasons.length);
+}
 export function adverseChanges(changes) {
   const out = [];
   for (const c of changes) {
@@ -268,7 +275,7 @@ export async function runAmend(ctx) {
     return o;
   });
 
-  let consentChosen = false;
+  let consentChosen = false, aiAdverse = [], chosenCut = [];
   // 자체 검토: 규정에 없던 법률 용어, 없는 법령명, 공무원 법령 인용, 항끼리 모순, 의도·근거 요건 누락을 찾아 고친다
   const review = await ctx.step('자체 검토', async (s) => {
     const live = draft.changes.filter((c) => c.op !== 'delete');
@@ -279,8 +286,12 @@ export async function runAmend(ctx) {
     // 현행보다 불리해진 변경(혜택 감소·유급 축소·세부 기준 삭제)이 있으면 담당자가 정한다:
     //  · 유리한 내용 유지 → 자체 검토가 되살린다  · 불리한 변경으로 진행 → 되살리지 않고 근로자 동의 절차를 문서에 넣는다
     // 「추천대로 진행」이면 의도가 줄이라는 것일 때만 불리한 변경으로, 아니면 유리한 내용 유지
-    const cut = adverseChanges(live.filter((c) => c.op === 'amend').map((c) => ({ op: 'amend', ref: c.ref, title: byRef.get(c.ref)?.title || '', old: byRef.get(c.ref)?.body || '', new: c.new_text })));
-    const wantsCut = /줄이|줄인|축소|감축|폐지|삭제|없앤|없애|하향|낮추|낮춘/.test(intent);
+    const amended = live.filter((c) => c.op === 'amend').map((c) => ({ op: 'amend', ref: c.ref, title: byRef.get(c.ref)?.title || '', old: byRef.get(c.ref)?.body || '', new: c.new_text }));
+    // 규칙(수치·유급 범위·호목 수) + AI 판정(대상 축소·요건 강화 등 문장으로 바뀐 불리함)을 합친다
+    try { aiAdverse = await judgeAdverse({ llm, items: amended, intent }); } catch (e) { ctx.log(`AI 불리 판정 실패(${e.code || 'error'}) — 규칙 판정만 씁니다.`); }
+    const cut = mergeAdverse(adverseChanges(amended), aiAdverse);
+    // 의도 자체가 줄이거나 강화하는 것이면(승인제·의무화·제한 등) 「불리한 변경으로 진행」을 기본으로 둔다
+    const wantsCut = CUT_INTENT.test(intent);
     let keepFavorable = false;
     if (cut.length) {
       const list = cut.map((a) => `${a.ref}(${a.reasons.join(', ')})`).join('; ');
@@ -292,7 +303,7 @@ export async function runAmend(ctx) {
         ] });
         keepFavorable = String([].concat(v)[0] || (wantsCut ? 'cut' : 'keep')) === 'keep';
       }
-      consentChosen = !keepFavorable;
+      consentChosen = !keepFavorable; if (consentChosen) chosenCut = cut;
       ctx.log(`· 불리한 변경 후보 ${cut.length}건 — ${keepFavorable ? '유리한 내용 유지(자체 검토가 되살림)' : '불리한 변경으로 진행(동의 절차 안내)'}`);
     }
     const extraIssues = keepFavorable ? cut.map((a) => ({ ref: a.ref, kind: 'adverse', problem: `${a.ref}: 현행보다 직원에게 불리해졌습니다(${a.reasons.join(', ')}). 현행 규정이 법령보다 유리한 내용(세부 호·목, 유급 범위, 일수)은 그대로 두고, 법령 기준에 못 미치는 부분만 고친 본문을 쓰세요.` })) : [];
@@ -347,9 +358,15 @@ export async function runAmend(ctx) {
     const otherCorr = fix.corr.filter((c) => c.doc_id !== doc.doc_id);
     const shortWarn = changes.filter((c) => c.op === 'amend' && c.old.length >= 400 && c.new.length < c.old.length * 0.6).map((c) => `${c.ref}: 수정안이 원문보다 크게 짧습니다. 항·호 누락 여부를 대조하세요.`);
     const paraLoss = changes.filter((c) => c.op === 'amend' && splitParagraphs(c.new).length < splitParagraphs(c.old).length).map((c) => `${c.ref}: 항 수가 줄었습니다(${splitParagraphs(c.old).length}→${splitParagraphs(c.new).length}). 의도한 삭제인지 확인하세요.`);
-    const adverse = adverseChanges(changes);
+    // 자체 검토로 본문이 바뀐 조문은 AI 판정을 최종 본문으로 다시 받는다(바뀐 본문에 옛 판정을 쓰지 않음)
+    const sameText = (a) => changes.some((c) => c.ref === a.ref && c.op === 'amend' && c.new.replace(/\s+/g, '') === String(a.new || '').replace(/^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*/, '').replace(/\n{2,}/g, '\n').replace(/\s+/g, ''));
+    const redo = changes.filter((c) => c.op === 'amend' && aiAdverse.some((a) => a.ref === c.ref && !sameText(a)));
+    if (redo.length && llm) { try { const again = await judgeAdverse({ llm, items: redo.map((c) => ({ ref: c.ref, title: c.title, old: c.old, new: c.new })), intent }); aiAdverse = [...aiAdverse.filter(sameText), ...again.map((a) => ({ ...a, new: a.new }))]; } catch { aiAdverse = aiAdverse.filter(sameText); } }
+    const adverse = mergeAdverse(adverseChanges(changes), aiAdverse.filter((a) => changes.some((c) => c.ref === a.ref && c.op === 'amend' && c.new.replace(/\s+/g, '') === String(a.new || '').replace(/^제\s*\d+\s*조(?:의\s*\d+)?\s*(?:\([^)]*\))?\s*/, '').replace(/\n{2,}/g, '\n').replace(/\s+/g, ''))));
     // 담당자가 「불리한 변경으로 진행」을 골랐고(또는 줄이라는 의도) 최종안에도 불리한 변경이 남아 있으면 동의 절차가 필요하다
-    const consent = (consentChosen || /줄이|줄인|축소|감축|폐지|삭제|없앤|없애|하향|낮추|낮춘/.test(intent)) && adverse.length ? { required: true, items: adverse.map((a) => ({ ref: a.ref, reasons: a.reasons })) } : null;
+    // 담당자가 불리한 변경으로 진행하기로 했으면, 자체 검토가 문구를 조금 바꿨어도 그때 확인한 불리한 점으로 동의 절차를 안내한다
+    const consentItems = adverse.length ? adverse : consentChosen ? chosenCut : [];
+    const consent = (consentChosen || (input.auto && CUT_INTENT.test(intent))) && consentItems.length ? { required: true, items: consentItems.map((a) => ({ ref: a.ref, reasons: a.reasons })) } : null;
     // 근거 없는 수치: 수정안의 「N일·N개월·N회…」가 현행 조문·개정 의도·근거 어디에도 없으면 AI가 정한 값으로 알린다
     const numTok = (t) => [...String(t || '').matchAll(/(\d+(?:\.\d+)?)\s*(일|개월|년|시간|회|퍼센트|%|만원|원|명|세)(?![가-힣]*조)/g)].map((m) => `${m[1]}${m[2]}`);
     const known = new Set([...numTok(intent), ...evidence.flatMap((e) => numTok(e.text)), ...changes.flatMap((c) => numTok(c.old)), ...main.flatMap((a) => numTok(a.body))]);
@@ -441,7 +458,7 @@ export async function runAmend(ctx) {
     ];
     const ev = [{ label: `대상 규정 ${doc.inst || ''} ${title}`.trim(), doc_id: doc.doc_id, edition: editionLabel(doc) }, ...evidence.map((e) => ({ label: `[${e.id}] ${e.kind} ${e.label}`, doc_id: e.doc_id, ref: e.ref, edition: e.edition }))];
     s.note(`문서 ${sections.length}종 · 대비표 ${sections[1].rows.length}행`);
-    try { ctx.metric?.('amend', { ops: changes.map((c) => c.op).join(','), absent_topic: !!absentTopic, sibling: !!sibling, evidence: evidence?.length ?? null, evidence_errors: errors?.length ?? null, review_applied: review?.applied?.length ?? null, review_rejected: review?.rejected?.length ?? null, review_remaining: review?.remaining?.length ?? null, dropped: draft.dropped?.length ?? 0, not_reflected: draft.not_reflected?.length ?? 0, checklist: checks.filter(Boolean).length, org_mismatch: !!orgMismatch, no_change: !!noChange }); } catch { /* 지표는 작업을 막지 않는다 */ }
+    try { ctx.metric?.('amend', { ops: changes.map((c) => c.op).join(','), absent_topic: !!absentTopic, sibling: !!sibling, evidence: evidence?.length ?? null, evidence_errors: errors?.length ?? null, review_applied: review?.applied?.length ?? null, review_rejected: review?.rejected?.length ?? null, review_remaining: review?.remaining?.length ?? null, dropped: draft.dropped?.length ?? 0, not_reflected: draft.not_reflected?.length ?? 0, checklist: checks.filter(Boolean).length, org_mismatch: !!orgMismatch, no_change: !!noChange, adverse_rule: adverseChanges(changes).length, adverse_ai: aiAdverse.length, consent: !!consent }); } catch { /* 지표는 작업을 막지 않는다 */ }
     return { sibling, no_change: noChange, consent, kind: '개정', moves: moveRanges(fix.map), docset: { kind: '일부개정', title, sections, evidence: ev }, changes: allChanges, corrections: fix.corr, citing: fix.citing, model: llm.config, doc: { doc_id: doc.doc_id, title, inst: doc.inst }, docKeys: [...sections.map((x) => x.id), 'evidence'] };
   });
 }

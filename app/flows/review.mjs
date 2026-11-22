@@ -142,3 +142,20 @@ export async function selfReview({ llm, sources, items, intent = '', evidence = 
   const remaining = (await detectIssues({ items: after, docText, profile, sources })).map((x) => x.problem);
   return { found: found.map((x) => x.problem), fixed, applied, rejected, remaining };
 }
+
+// 불리 여부 판정(AI): 수치 규칙이 못 잡는 불리함(대상·자격 축소, 요건·절차 강화, 의무·제재 신설, 기한 단축 등)을 조문마다 본다.
+// 개정안에서 불리하게 바뀐 구절을 그대로 옮기게 하고(quote), 그 구절이 개정안에 실제로 있을 때만 쓴다 — 지어낸 판정을 막는다
+export async function judgeAdverse({ llm, items, intent = '' }) {
+  const list = items.filter((x) => x.old && x.new && x.old.replace(/\s+/g, '') !== x.new.replace(/\s+/g, '')).slice(0, 8);
+  if (!llm || !list.length) return [];
+  const o = await llm.chatJson([{ role: 'system', content: SYS_BASE }, { role: 'user', content: JSON.stringify({
+    과제: '각 조문의 현행 → 개정안이 직원(근로자)에게 불리한 변경인지 판정한다. 불리한 변경: 휴가·급여·수당·일수·유급 범위 축소, 적용 대상·자격 축소, 신청 요건·절차 강화(승인제 전환, 기한 단축, 서류 추가), 의무·금지·징계 신설이나 강화, 근로시간 증가, 직원 선택권 축소. 문구 정리·법령 명칭 변경·직원에게 유리하거나 중립적인 변경은 불리하지 않다. 불리하면 개정안에서 불리하게 바뀐 구절을 글자 그대로 quote 에 옮긴다.',
+    개정의도: intent,
+    조문: list.map((x) => ({ ref: x.ref, 제목: x.title || '', 현행: clip(x.old, 1500), 개정안: clip(x.new, 1500) })),
+    출력형식: { results: [{ ref: '제N조', adverse: 'true|false', reasons: ['불리한 점을 짧게(예: 승인제로 바뀜)'], quote: '개정안 구절' }] },
+  }) }], (x) => { if (!Array.isArray(x.results)) throw new Error('results 배열이 없습니다.'); return x; }, { maxTokens: 2000 });
+  const flatQ = (t) => String(t || '').replace(/\s+/g, '');
+  return o.results.filter((r) => (r.adverse === true || r.adverse === 'true') && Array.isArray(r.reasons) && r.reasons.length).map((r) => ({ r, it: list.find((x) => x.ref === r.ref) }))
+    .filter(({ r, it }) => it && flatQ(r.quote).length >= 2 && flatQ(it.new).includes(flatQ(r.quote)))
+    .map(({ r, it }) => ({ ref: it.ref, reasons: r.reasons.map((x) => clip(String(x), 60)).slice(0, 3), quote: clip(String(r.quote), 120), by: 'ai', new: it.new }));
+}

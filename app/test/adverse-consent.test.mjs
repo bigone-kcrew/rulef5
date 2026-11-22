@@ -45,3 +45,25 @@ test('in follow-recommendation mode an explicit reduction proceeds with consent,
   const keep = await run({ intent: '배우자 출산휴가를 법 기준에 맞춘다', auto: true });
   assert.equal(keep.j.result.consent, null);
 });
+
+import { judgeAdverse } from '../flows/review.mjs';
+import { mergeAdverse } from '../flows/amend.mjs';
+test('AI adverse judgement catches wording-only cuts, drops verdicts whose quote is not in the draft, and merges with rule hits', async () => {
+  const out = { results: [
+    { ref: '제8조', adverse: true, reasons: ['부서장 승인제로 바뀜'], quote: '원장의 승인을 받아야' },
+    { ref: '제9조', adverse: true, reasons: ['지어낸 판정'], quote: '본문에 없는 구절' },
+    { ref: '제10조', adverse: false, reasons: [], quote: '' },
+  ] };
+  const fake = { chatJson: async (_m, validate) => validate(JSON.parse(JSON.stringify(out))) };
+  const items = [
+    { ref: '제8조', title: '휴가의 신청', old: '휴가를 받으려는 직원은 휴가신청서를 제출한다.', new: '휴가를 받으려는 직원은 휴가신청서를 제출하고 원장의 승인을 받아야 한다.' },
+    { ref: '제9조', title: '휴가의 승인', old: '부서장이 승인한다.', new: '부서장이 승인하며 기록한다.' },
+    { ref: '제10조', title: '기타', old: '가', new: '나' },
+  ];
+  const r = await judgeAdverse({ llm: fake, items, intent: '휴가 절차 정비' });
+  assert.deepEqual(r.map((x) => [x.ref, x.reasons[0]]), [['제8조', '부서장 승인제로 바뀜']]);
+  const merged = mergeAdverse([{ ref: '제7조', reasons: ['10일 → 5일(혜택 감소)'] }, { ref: '제8조', reasons: ['규칙 이유'] }], r);
+  assert.deepEqual(merged.map((x) => [x.ref, x.reasons.length]), [['제7조', 1], ['제8조', 2]]);
+  assert.equal(merged[1].reasons[1], 'AI: 부서장 승인제로 바뀜');
+  assert.deepEqual(await judgeAdverse({ llm: null, items }), []);
+});
