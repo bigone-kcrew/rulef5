@@ -89,3 +89,15 @@ test('large static files are served with byte ranges so video seeking works', as
     assert.equal((await fetch(s.base + '/media/v.mp4', { headers: { range: `bytes=${big.length}-` } })).status, 416);
   } finally { await s.close(); }
 });
+
+test('typical durations come from finished jobs without the time spent waiting for people', async () => {
+  const logDir = mkdtempSync(join(tmpdir(), 'logs-'));
+  const day = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const rec = (ms, wait, status = 'done', type = 'amend') => ({ type, status, ms, steps: [], gates: wait ? [['pick_targets', wait, false]] : [], metrics: {} });
+  writeFileSync(join(logDir, `jobs-${day}.jsonl`), [rec(50000, 20000), rec(40000, 0), rec(35000, 0), rec(90000, 0, 'failed'), rec(10000, 0, 'done', 'check')].map((x) => JSON.stringify(x)).join('\n') + '\n');
+  const s = await boot({ logDir });
+  try {
+    const j = await (await fetch(s.base + '/api/typical')).json();
+    assert.deepEqual(j.amend, { ms: 35000, n: 3 }); assert.equal(j.check, undefined);
+  } finally { await s.close(); }
+});

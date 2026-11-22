@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { DocLink } from '@/components/doc-viewer'
 import { Fragment, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CheckIcon, XIcon, MinusIcon, HandIcon, FileSearchIcon, TerminalIcon, RotateCwIcon, ArrowLeftIcon, ArrowRightIcon } from 'lucide-react'
+import { CheckIcon, XIcon, MinusIcon, HandIcon, FileSearchIcon, TerminalIcon, ChevronDownIcon, RotateCwIcon, ArrowLeftIcon, ArrowRightIcon } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,16 @@ import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { MoreTrigger } from '@/components/more-trigger'
-import type { Gate, Job } from '@/lib/api'
+import { api, type Gate, type Job } from '@/lib/api'
+
+// 기능별 보통 걸리는 시간(최근 기록의 중앙값, 사람 확인 대기 제외): 한 번만 불러 같이 쓴다
+let typicalP: Promise<Record<string, { ms: number; n: number }>> | null = null
+function useTypical(type?: string) {
+  const [v, setV] = useState<{ ms: number; n: number } | null>(null)
+  useEffect(() => { if (!type) return; typicalP ||= api<Record<string, { ms: number; n: number }>>('/api/typical').catch(() => ({})); let live = true; typicalP.then((t) => live && setV(t[type] || null)); return () => { live = false } }, [type])
+  return v
+}
+const roughly = (ms: number) => (ms < 60e3 ? `${Math.max(10, Math.round(ms / 10e3) * 10)}초` : `${Math.round(ms / 60e3)}분`)
 
 // 끝난 작업은 서버가 잰 시간(시작~마지막 갱신)을 보여 준다 — 새로 고친 뒤에도 시간이 늘지 않게
 function Elapsed({ since, stop, span }: { since: number; stop: boolean; span?: number | null }) {
@@ -26,6 +35,13 @@ function GateCard({ gate, onAnswer, onBack }: { gate: Gate; onAnswer: (v: unknow
   const [sending, setSending] = useState(false)
   const toggle = (v: string, c: boolean) => setSel((cur) => (gate.multi ? (c ? [...cur, v] : cur.filter((x) => x !== v)) : c ? [v] : []))
   const opts = gate.options || []
+  // 묶음(개정할 조문·참고할 근거)이 여럿이면 첫 묶음만 펼치고, 4건 이상인 나머지 묶음은 접어 둔다(선택은 그대로)
+  const groups = [...new Set(opts.map((o) => o.group).filter(Boolean))] as string[]
+  const [closed, setClosed] = useState<string[]>(() => groups.slice(1).filter((g) => opts.filter((o) => o.group === g).length > 3))
+  // 펼친 묶음도 후보가 6건을 넘으면 처음 4건과 고른 것만 보이고 나머지는 「더 보기」(숫자 키로 고른 것도 보인다)
+  const [full, setFull] = useState<string[]>([])
+  const gk = (o: { group?: string }) => o.group || ''
+  const hidden = (o: { value: string; group?: string }) => { const all = opts.filter((x) => gk(x) === gk(o)); return all.length > 6 && !full.includes(gk(o)) && all.indexOf(o as any) >= 4 && !sel.includes(o.value) }
   const send = async () => { if (sending) return; setSending(true); try { await onAnswer(gate.multi ? sel : sel[0] ?? null) } catch (e) { toast.error(`확인을 보내지 못했습니다: ${(e as Error).message}`); setSending(false) } }
   // 키보드: Enter = 지금 선택(추천)대로 확인, 1~9 = 그 번호 선택 켜고 끄기 — 입력 중이거나 다른 창이 열려 있으면 무시
   useEffect(() => {
@@ -42,14 +58,20 @@ function GateCard({ gate, onAnswer, onBack }: { gate: Gate; onAnswer: (v: unknow
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="relative rounded-lg border-2 border-primary bg-primary/5 p-4">
       <span className="absolute -top-3 left-4 flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground"><HandIcon className="size-3.5" />사람 확인</span>
       <p className="mb-3 mt-1 font-semibold">{gate.prompt}</p>
-      <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto pr-1">
+      <div className="flex max-h-[60vh] flex-col gap-1.5 overflow-y-auto pr-1">
         {opts.map((o, i) => (<Fragment key={o.value}>
-          {o.group && o.group !== opts[i - 1]?.group && <div className="mt-1 text-xs font-semibold text-muted-foreground first:mt-0">{o.group}</div>}
-          <motion.label initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className={`flex cursor-pointer items-start gap-3 rounded-md border p-2.5 transition-colors ${sel.includes(o.value) ? 'bg-muted/50' : 'text-muted-foreground hover:bg-muted/30'}`}>
+          {o.group && o.group !== opts[i - 1]?.group && (() => {
+            const all = opts.filter((x) => x.group === o.group), on = all.filter((x) => sel.includes(x.value)).length, shut = closed.includes(o.group!)
+            return groups.length > 1
+              ? <button type="button" aria-expanded={!shut} onClick={() => setClosed(shut ? closed.filter((g) => g !== o.group) : [...closed, o.group!])} className="mt-1 flex min-h-8 items-center gap-1.5 rounded-md text-left text-xs font-semibold text-muted-foreground hover:text-foreground first:mt-0"><ChevronDownIcon className={`size-4 transition-transform ${shut ? '-rotate-90' : ''}`} />{o.group} <span className="font-normal">{on}/{all.length}건 선택{shut ? ' · 펼쳐서 바꾸기' : ''}</span></button>
+              : <div className="mt-1 text-xs font-semibold text-muted-foreground first:mt-0">{o.group}</div>
+          })()}
+          {!(o.group && closed.includes(o.group)) && !hidden(o) && <motion.label initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className={`flex cursor-pointer items-start gap-3 rounded-md border p-2.5 transition-colors ${sel.includes(o.value) ? 'bg-muted/50' : 'text-muted-foreground hover:bg-muted/30'}`}>
             {i < 9 && <kbd className="mt-0.5 hidden rounded border px-1 font-mono text-xs text-muted-foreground sm:inline">{i + 1}</kbd>}
             <Checkbox className="mt-0.5" checked={sel.includes(o.value)} onCheckedChange={(c) => toggle(o.value, !!c)} />
             <span className="min-w-0 text-sm"><span className="font-medium">{o.doc_id ? <DocLink docId={o.doc_id} refName={o.ref}>{o.label}</DocLink> : o.label}</span>{o.detail && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{o.detail}</span>}</span>
-          </motion.label>
+          </motion.label>}
+          {!(o.group && closed.includes(o.group)) && gk(o) !== gk(opts[i + 1] || { group: '\u0000' }) && opts.some((x) => gk(x) === gk(o) && hidden(x)) && <Button variant="ghost" size="sm" className="self-start text-muted-foreground" onClick={() => setFull([...full, gk(o)])}><ChevronDownIcon data-icon="inline-start" />나머지 후보 {opts.filter((x) => gk(x) === gk(o) && hidden(x)).length}건 더 보기</Button>}
         </Fragment>))}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -67,6 +89,7 @@ function GateCard({ gate, onAnswer, onBack }: { gate: Gate; onAnswer: (v: unknow
 
 const ICON = { running: Spinner, done: CheckIcon, failed: XIcon, skipped: MinusIcon }
 export function JobTimeline({ job, error, startedAt, onAnswer, onRetry, onBack, title = '에이전트 작업' }: { job: Job | null; error: string | null; startedAt: number | null; onAnswer: (gate: string, v: unknown) => Promise<void>; onRetry?: () => void; onBack?: () => void; title?: string }) {
+  const typical = useTypical(job?.type)
   if (!startedAt) return null
   const status = error ? 'failed' : job?.status || 'running'
   const done = job?.steps.filter((s) => s.state === 'done').length || 0
@@ -78,7 +101,7 @@ export function JobTimeline({ job, error, startedAt, onAnswer, onRetry, onBack, 
           {status === 'running' && <Spinner />}{title}
           <Badge variant={status === 'done' ? 'secondary' : status === 'failed' ? 'destructive' : 'outline'}>{{ running: '진행 중', waiting: '확인 대기', done: '완료', failed: '중단' }[status]}</Badge>
         </CardTitle>
-        <CardDescription>{status === 'running' ? '모델 응답에 단계마다 20~90초 걸릴 수 있습니다. 진행 상황이 실시간으로 표시됩니다.' : status === 'waiting' ? '에이전트가 판단이 필요한 지점에서 멈췄습니다. 확인하면 이어서 진행합니다.' : status === 'done' ? '끝났습니다. 아래 결과를 확인하세요.' : '중단된 단계와 사유를 확인하세요.'}</CardDescription>
+        <CardDescription>{status === 'running' ? `${typical ? `AI 작업은 보통 ${roughly(typical.ms)} 안팎입니다(최근 ${typical.n}건, 사람 확인을 기다린 시간 제외).` : '모델 응답에 단계마다 20~90초 걸릴 수 있습니다.'} 진행 상황이 실시간으로 표시됩니다.` : status === 'waiting' ? '에이전트가 판단이 필요한 지점에서 멈췄습니다. 확인하면 이어서 진행합니다.' : status === 'done' ? '끝났습니다. 아래 결과를 확인하세요.' : '중단된 단계와 사유를 확인하세요.'}</CardDescription>
         <CardAction className="text-sm text-muted-foreground"><Elapsed since={startedAt} stop={status === 'done' || status === 'failed'} span={job?.created && job?.updated ? job.updated - job.created : null} /></CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">

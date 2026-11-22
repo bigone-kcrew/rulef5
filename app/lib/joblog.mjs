@@ -31,3 +31,19 @@ export function summarizeLogs(dir, days = 7) {
   const gates = Object.entries(by(recs.flatMap((r) => (r.gates || []).map(([id, w, c]) => ({ id, w, c }))), (g) => g.id)).map(([id, xs]) => { const known = xs.filter((x) => typeof x.c === 'boolean'); return { id, n: xs.length, median_ms: med(xs.map((x) => x.w)), changed: known.filter((x) => x.c).length, known: known.length }; });
   return { days, total: recs.length, byType, failures, slowSteps, amend, agent, gates };
 }
+
+// 기능별 보통 걸리는 시간(진행 화면 안내용): 최근 끝난 작업의 중앙값, 사람 확인을 기다린 시간은 뺀다. 3건 미만인 기능은 내지 않는다
+export function typicalDurations(dir, days = 14) {
+  if (!existsSync(dir)) return {};
+  const cut = new Date(Date.now() + 9 * 3600e3 - days * 86400e3).toISOString().slice(0, 10);
+  const out = {};
+  for (const f of readdirSync(dir).filter((x) => /^jobs-\d{4}-\d{2}-\d{2}\.jsonl$/.test(x) && x.slice(5, 15) >= cut)) {
+    for (const l of rf(join(dir, f), 'utf8').split('\n')) {
+      let r; try { r = JSON.parse(l); } catch { continue; }
+      if (r?.status !== 'done' || typeof r.ms !== 'number') continue;
+      const wait = (r.gates || []).reduce((s, g) => s + (Number(g[1]) || 0), 0);
+      (out[r.type] ||= []).push(Math.max(0, r.ms - wait));
+    }
+  }
+  return Object.fromEntries(Object.entries(out).filter(([, xs]) => xs.length >= 3).map(([t, xs]) => { xs.sort((a, b) => a - b); return [t, { ms: xs[Math.floor(xs.length / 2)], n: xs.length }]; }));
+}

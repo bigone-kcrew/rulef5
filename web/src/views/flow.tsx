@@ -100,6 +100,10 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
 
   const idx = steps.findIndex((s) => s.id === flow.step)
   const cur = steps[Math.max(0, idx)]
+  // 초안을 만들기 전에는 「초안 검토」까지만 보이고 협의·심의·공포 단계는 접어 둔다(펼치기 가능)
+  const [showAll, setShowAll] = useState(false)
+  const reviewAt = steps.findIndex((s) => s.id === 'review')
+  const folded = !showAll && !flow.result && reviewAt >= 0 && reviewAt < steps.length - 1
   const reachable = (id: string) => id === 'prepare' || (id === 'draft' ? !!job.startedAt || !!flow.result : !!flow.result)
   const go = (id: string) => { if (reachable(id)) { setFlow((f) => ({ ...f, step: id })); window.scrollTo({ top: 0, behavior: 'smooth' }) } }
   const complete = () => { const next = steps[idx + 1]; setFlow((f) => ({ ...f, done: [...new Set([...f.done, cur.id])], step: next ? next.id : 'finished' })); window.scrollTo({ top: 0, behavior: 'smooth' }) }
@@ -111,6 +115,10 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
   const update = (s: Section) => setFlow((f) => ({ ...f, sections: (f.sections || []).map((x) => (x.id === s.id ? s : x)) }))
   // 개정 후 전문 다시 만들기: 화면에서 고친 신구조문대비표(개정안 칸)를 조문 본문으로 되돌려 원 규정 전체에 다시 반영한다(모델 없이)
   const [rebuilding, setRebuilding] = useState(false)
+  // 검토 화면 위 숫자 칸을 누르면 해당 문서·목록으로 이동한다
+  const [revTab, setRevTab] = useState<string | null>(null)
+  const [evOpen, setEvOpen] = useState(false)
+  const jump = (id: string) => setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30)
   const rebuildFull = async () => {
     const rows = sec('comparison')?.rows || [], cur = sec('full_text'); if (!cur || !flow.result?.doc?.doc_id) return
     const changes = changesFromRows(flow.result.changes || [], rows)
@@ -133,6 +141,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
         </div>
         <ol className="flex gap-1.5 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
           {steps.map((s, i) => {
+            if (folded && i > reviewAt) return null
             const on = s.id === flow.step, done = flow.done.includes(s.id), can = reachable(s.id)
             return (
               <li key={s.id} className="shrink-0">
@@ -143,6 +152,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
               </li>
             )
           })}
+          {folded && <li className="shrink-0"><button type="button" onClick={() => setShowAll(true)} className="flex h-full min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-card/70 hover:text-foreground"><ChevronDownIcon className="size-4" /><span className="whitespace-nowrap">이후 절차 {steps.length - reviewAt - 1}단계<span className="hidden lg:inline"> 보기</span></span></button></li>}
         </ol>
         {title && <p className="mt-3 hidden border-t px-1 pt-3 text-xs text-muted-foreground lg:block">진행 중: {title}</p>}
       </nav>
@@ -174,15 +184,15 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
             <StepPanel key="review" title={`${idx + 1}. ${cur.title}`} hint={`「${title}」 ${flow.result?.docset.kind}안 — AI 초안입니다. 원문과 대조해 고치세요. 표와 본문은 눌러서 바로 고칠 수 있습니다.`}>
               <div className="flex flex-col gap-6">
                 {flow.result?.no_change && <Alert><TriangleAlertIcon /><AlertTitle>바꿀 곳이 없습니다</AlertTitle><AlertDescription><p>{flow.result.no_change.refs.join(', ')}의 수정안이 현행과 같습니다. 요청한 내용이 이미 규정에 들어 있을 수 있으니 원문을 확인하세요.</p><Button variant="outline" size="sm" className="mt-2" onClick={() => go('prepare')}><ArrowLeftIcon data-icon="inline-start" />개정 의도 고쳐 다시 만들기</Button></AlertDescription></Alert>}
-                <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4">
-                  {([[mode === 'amend' ? '바뀌는 조문' : '조문', new Set((sec('comparison')?.rows || []).filter((r) => r.newHtml !== '(현행과 같음)').map((r) => r.ref)).size], ['대비표 행', sec('comparison')?.rows?.length || 0], ['근거 자료', flow.result?.docset.evidence?.length || 0], ['확인할 점', (sec('checklist')?.body || '').split('\n').filter((l) => l.startsWith('☐')).length]] as [string, number][]).map(([l, v]) => <div key={l} className="bg-card p-3"><dt className="text-xs text-muted-foreground">{l}</dt><dd className="font-mono text-2xl font-semibold tabular-nums">{v}</dd></div>)}
-                </dl>
-                <Tabs defaultValue={CORE.find((id) => sec(id))}>
+                <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4">
+                  {([[mode === 'amend' ? '바뀌는 조문' : '조문', new Set((sec('comparison')?.rows || []).filter((r) => r.newHtml !== '(현행과 같음)').map((r) => r.ref)).size], ['대비표 행', sec('comparison')?.rows?.length || 0], ['근거 자료', (flow.result?.docset.evidence || []).filter((e: any) => !/^대상 규정/.test(e.label)).length], ['확인할 점', (sec('checklist')?.body || '').split('\n').filter((l) => l.startsWith('☐')).length]] as [string, number][]).map(([l, v], i) => <button type="button" key={l} title="눌러서 보기" onClick={() => { if (i < 2) { setRevTab('comparison'); jump('rv-docs') } else if (i === 2) { setEvOpen(true); jump('rv-ev') } else jump('rv-checks') }} className="group bg-card p-3 text-left transition-colors hover:bg-muted/60"><span className="flex items-center justify-between text-xs text-muted-foreground">{l}<ArrowRightIcon className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></span><span className="block font-mono text-2xl font-semibold tabular-nums">{v}</span></button>)}
+                </div>
+                <Tabs id="rv-docs" className="scroll-mt-4 sm:scroll-mt-32" value={revTab ?? CORE.find((id) => sec(id))} onValueChange={(v) => setRevTab(String(v))}>
                   <TabsList>{CORE.filter((id) => sec(id)).map((id) => <TabsTrigger key={id} value={id}>{sec(id)!.title}</TabsTrigger>)}</TabsList>
                   {CORE.filter((id) => sec(id)).map((id) => <TabsContent key={id} value={id} className="rounded-md border bg-background p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} /></TabsContent>)}
                 </Tabs>
                 {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표·부칙을 고쳤다면(개정문만 고쳤다면 대비표에도 같게 고친 뒤)</span><Button variant="outline" size="sm" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
-                <section className="flex flex-col gap-2">
+                <section id="rv-checks" className="flex scroll-mt-4 sm:scroll-mt-32 flex-col gap-2">
                   <h3 className="flex items-center gap-2 font-semibold"><ListChecksIcon className="size-4" />확인할 점</h3>
                   {CHECKS.filter((id) => sec(id)).map((id, i) => (
                     <Collapsible key={id} defaultOpen={i === 0} className="rounded-md border bg-background">
@@ -190,7 +200,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                       <CollapsibleContent><div className="border-t p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} /></div></CollapsibleContent>
                     </Collapsible>
                   ))}
-                  <Collapsible className="rounded-md border bg-background">
+                  <Collapsible id="rv-ev" open={evOpen} onOpenChange={setEvOpen} className="scroll-mt-4 sm:scroll-mt-32 rounded-md border bg-background">
                     <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium">근거 자료 {(flow.result?.docset.evidence || []).filter((e: any) => !/^대상 규정/.test(e.label)).length}건<ChevronDownIcon className="size-4 text-muted-foreground" /></CollapsibleTrigger>
                     <CollapsibleContent><ol className="flex flex-col gap-1.5 border-t p-3 text-sm">{(flow.result?.docset.evidence || []).map((e: any, i: number) => <li key={i}><span className="font-medium"><DocLink docId={e.doc_id} refName={e.ref}>{e.label}</DocLink></span> <span className="break-all text-xs text-muted-foreground">{e.doc_id}{e.ref ? ` ${e.ref}` : ''}{e.edition ? ` · ${e.edition}` : ''}</span></li>)}</ol></CollapsibleContent>
                   </Collapsible>

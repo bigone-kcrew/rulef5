@@ -9,7 +9,7 @@ import { searchInstitutions } from '../flows/similar.mjs';
 import { lawFamily } from '../flows/lawchain.mjs';
 import { searchOrgs, orgsInfo } from './orgs.mjs';
 import { consolidatedDoc } from '../flows/docset.mjs';
-import { summarizeLogs } from './joblog.mjs';
+import { summarizeLogs, typicalDurations } from './joblog.mjs';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { normalizeArticle } from './text.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -33,6 +33,7 @@ export function parseLawOc(v) {
   return s;
 }
 export function createRoutes({ sources: baseSources, jobs, workspace, env, flows, llmCounter = null, features = {}, logDir = null }) {
+  let typicalCache = null;
   const srcFor = (req) => baseSources.withLawOc(parseLawOc(req.headers['x-law-oc']));
   const procedures = loadProcedures();
   const quota = createUploadQuota({ dailyBytes: (+env.UPLOAD_DAILY_MB || 300) * 1024 * 1024 });
@@ -44,6 +45,11 @@ export function createRoutes({ sources: baseSources, jobs, workspace, env, flows
       const sources = srcFor(req);
       let llm = null; try { const c = resolveLlmConfig(env, null); llm = c ? { preset: c.preset, model: c.model } : null; } catch { /* 무시 */ }
       sendJson(res, 200, { data: sources.status(), llm, presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, model: v.model, server_key: v.envKeys.some((e) => env[e]) }])), openrouter_models: allowedModels(env, 'openrouter'), models: { openrouter: allowedModels(env, 'openrouter'), nim: allowedModels(env, 'nim') }, features: { ...features, hwpx: !!env.KORDOC_URL }, active_jobs: jobs.active?.() ?? 0 });
+    }],
+    // 기능별 보통 걸리는 시간(진행 화면 안내): 작업 기록에서 10분마다 다시 계산한다(건수·시간만, 내용 없음)
+    ['GET', '/api/typical', (req, res) => {
+      if (!typicalCache || Date.now() - typicalCache.t > 600e3) { let v = {}; try { v = typicalDurations(logDir || join(dirname(fileURLToPath(import.meta.url)), '..', 'var', 'logs')); } catch { /* 기록이 없거나 깨져도 안내만 빠진다 */ } typicalCache = { t: Date.now(), v }; }
+      sendJson(res, 200, typicalCache.v);
     }],
     ['GET', '/api/procedures', (req, res) => sendJson(res, 200, procedures)],
     ['GET', '/api/profiles', (req, res) => sendJson(res, 200, profiles)],
