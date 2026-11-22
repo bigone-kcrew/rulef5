@@ -38,6 +38,8 @@ export function govJsonToDoc(d, target, id) {
   return { ...doc, source: 'law', corpus: target, doc_type: info['행정규칙종류'] || info['자치법규종류'] || null, inst: info['소관부처명'] || info['지자체기관명'] || null, edition: { state: 'current', effective_from: info['시행일자'] || null, effective_to: null, warning: null } };
 }
 
+const effRow = (x) => ({ name: x['법령명한글'] || '', mst: String(x['법령일련번호'] || ''), law_id: x['법령ID'] || '', eff: String(x['시행일자'] || ''), anc: String(x['공포일자'] || ''), kind: x['법령구분명'] || '', change: x['제개정구분명'] || '', dept: x['소관부처명'] || '', state: x['현행연혁코드'] || '' });
+export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
 export function createLawGo({ oc = null, fetchImpl = fetch, cache = null } = {}) {
   async function get(path, params) {
     const url = `${BASE}/${path}?${new URLSearchParams({ OC: oc, type: 'JSON', ...params })}`;
@@ -61,6 +63,30 @@ export function createLawGo({ oc = null, fetchImpl = fetch, cache = null } = {})
         : target === 'admrul'
           ? { target, id: x['행정규칙일련번호'], name: x['행정규칙명'], kind: x['행정규칙종류'], date: x['시행일자'], dept: x['소관부처명'], state: x['현행연혁구분'] }
           : { target, id: x['자치법규일련번호'], name: x['자치법규명'], kind: x['자치법규종류'], date: x['시행일자'], dept: x['지자체기관명'], state: '현행' });
+    },
+    // 시행일 기준 법령 목록(eflaw): from~to(YYYYMMDD) 사이에 시행되는(될) 법령 판본. 쪽마다 100건, 최대 pages 쪽
+    async effective(from, to, { pages = 8, sort = 'efasc' } = {}) {
+      if (!oc) return [];
+      const out = [];
+      for (let page = 1; page <= pages; page++) {
+        const d = await get('lawSearch.do', { target: 'eflaw', efYd: `${from}~${to}`, display: 100, sort, ...(page > 1 ? { page } : {}) });
+        const xs = arr(d.LawSearch?.law); out.push(...xs.map(effRow));
+        if (xs.length < 100) break;
+      }
+      return out;
+    },
+    // 한 법령의 시행일별 판본 연혁(이름이 정확히 같은 것만, 오래된 순). 같은 판본(MST)이 시행일을 나눠 여러 번 나올 수 있다
+    async timeline(name) {
+      if (!oc) return [];
+      const d = await get('lawSearch.do', { target: 'eflaw', query: name, display: 100, sort: 'efdes' });
+      const key = String(name).replace(/[ㆍ·\s]/g, '');
+      return arr(d.LawSearch?.law).map(effRow).filter((x) => x.name.replace(/[ㆍ·\s]/g, '') === key).reverse();
+    },
+    // 그 시행일에 적용되는(될) 법령 본문
+    async textAt(mst, efYd) {
+      if (!oc) throw Object.assign(new Error('법제처 연결이 설정되지 않았습니다.'), { status: 400, code: 'law_go_disabled' });
+      const doc = lawJsonToDoc(await get('lawService.do', { target: 'eflaw', MST: mst, efYd }), 'law', mst);
+      return { ...doc, edition: { ...doc.edition, effective_from: efYd, state: efYd > kstToday() ? 'scheduled' : 'current' } };
     },
     async text(target, id) {
       if (!oc) throw Object.assign(new Error('법제처 연결이 설정되지 않았습니다.'), { status: 400, code: 'law_go_disabled' });

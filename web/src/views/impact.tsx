@@ -1,7 +1,8 @@
 // 상위법 영향: 개정 전·후 조문 → 영향 조문 후보 → 개정으로 보내기
 import { DocLink } from '@/components/doc-viewer'
-import { useState } from 'react'
-import { HistoryIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { HistoryIcon, CheckIcon, SparklesIcon } from 'lucide-react'
 import { api } from '@/lib/api'
 import { motion } from 'motion/react'
 import { ArrowRightIcon, DownloadIcon } from 'lucide-react'
@@ -54,13 +55,39 @@ export default function ImpactView() {
   const rr = radar.job?.status === 'done' ? radar.job.result : null
   // 기관 유형별 기본 감시 법령(공공기관: 노동법, 지자체: 지방공무원 법령, 부처: 국가공무원 법령)
   const [rlaws, setRlaws] = useState(profile.type === 'local-gov' ? '지방공무원법, 지방공무원 복무규정' : profile.type === 'central-ministry' ? '국가공무원법, 국가공무원 복무규정' : '근로기준법, 남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률')
+  // 감시할 법령 제안: 법제처 「시행일 기준 법령」에서 최근·곧 시행되는 관련 법령(기관 유형별). 입력을 고치지 않았으면 상위 3개를 채운다
+  type Sugg = { law: string; why: string; eff: string; state: 'scheduled' | 'recent'; change: string; kinds: string[] }
+  const [sugg, setSugg] = useState<{ items: Sugg[]; note: string; disabled?: boolean } | null>(null)
+  const [sbusy, setSbusy] = useState(false)
+  const [edited, setEdited] = useState(false)
+  useEffect(() => {
+    let live = true; setSbusy(true)
+    api('/api/radar/suggest', { method: 'POST', body: { org_type: profile.type } }).then((v) => { if (!live) return; setSugg(v); if (!edited && v.items?.length) setRlaws(v.items.slice(0, 3).map((x: Sugg) => x.law).join(', ')) }).catch(() => live && setSugg(null)).finally(() => live && setSbusy(false))
+    return () => { live = false }
+  }, [profile.type]) // eslint-disable-line react-hooks/exhaustive-deps
+  const chosen = rlaws.split(',').map((x) => x.trim()).filter(Boolean)
+  const toggleLaw = (law: string) => { setEdited(true); if (chosen.includes(law)) setRlaws(chosen.filter((x) => x !== law).join(', ')); else if (chosen.length >= 3) toast.info('한 번에 3개까지 비교합니다. 다른 법령을 먼저 빼 주세요.'); else setRlaws([...chosen, law].join(', ')) }
+  const md = (s: string) => `${s.slice(0, 4) === String(new Date().getFullYear()) ? '' : `${s.slice(0, 4)}. `}${+s.slice(4, 6)}. ${+s.slice(6, 8)}.`
   const rows = (r?.candidates || []).filter((c: any) => filter === 'all' || c.status === filter)
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader><CardTitle>시행예정 레이더</CardTitle><CardDescription>곧 시행될 법령 판본을 바로 앞 판본과 조문 단위로 비교해, 미리 정비할 기관 규정과 착수 권장일(시행 30일 전)을 정리합니다. 법령은 3개까지.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>시행예정 레이더</CardTitle><CardDescription>최근·곧 시행되는 법령 판본을 바로 앞 판본과 조문 단위로 비교해, 미리 정비할 기관 규정과 착수 권장일(시행 30일 전)을 정리합니다. 아래 제안은 법제처 자료로 자동으로 고르며, 법령명을 직접 넣어도 됩니다(3개까지).</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => setRlaws(e.target.value)} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
+          <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3">
+            <div className="flex items-center gap-1.5 text-sm font-medium"><SparklesIcon className="size-4 text-primary" />최근·곧 시행되는 관련 법령<span className="font-normal text-muted-foreground">— 눌러서 고르기(최대 3개)</span></div>
+            {sbusy && <div className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner />법제처에서 시행일 기준 법령을 찾는 중…</div>}
+            {sugg?.items?.length ? (
+              <div className="flex flex-wrap gap-1.5">{sugg.items.map((x) => { const on = chosen.includes(x.law); return (
+                <button key={x.law} type="button" aria-pressed={on} onClick={() => toggleLaw(x.law)} title={`${x.law} · ${x.kinds.join('·')} ${x.change} · 관련: ${x.why}`}
+                  className={`inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border px-3 py-1 text-left text-xs transition-colors pointer-coarse:min-h-10 ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+                  {on && <CheckIcon className="size-3.5 shrink-0" />}<span className="font-medium">{x.law}</span>
+                  <span className={on ? 'opacity-80' : 'text-muted-foreground'}>{x.state === 'scheduled' ? `${md(x.eff)} 시행` : `${md(x.eff)} 시행됨`} · {x.why}{/타법/.test(x.change) ? ' · 타법개정' : ''}</span>
+                </button>) })}</div>
+            ) : !sbusy && <p className="text-xs text-muted-foreground">{sugg?.note || '제안을 불러오지 못했습니다. 법령명을 직접 넣어 주세요.'}</p>}
+            {sugg?.items?.length ? <p className="text-xs text-muted-foreground">{sugg.note}. 기관 유형(F11)에 맞춰 복무·인사·보수·계약·정보공개 등에 영향을 주는 법령을 골랐습니다(전수 아님).</p> : null}
+          </div>
+          <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => { setEdited(true); setRlaws(e.target.value) }} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
           <JobTimeline job={radar.job} error={radar.error} startedAt={radar.startedAt} onAnswer={radar.answer} onRetry={radar.canRetry ? radar.retry : undefined} title="시행예정 레이더" />
           {rr && (
             <div className="flex flex-col gap-2">

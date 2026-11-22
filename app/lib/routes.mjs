@@ -7,6 +7,7 @@ import { loadProcedures } from '../flows/procedure.mjs';
 import { lawVersions } from '../flows/lawversions.mjs';
 import { searchInstitutions } from '../flows/similar.mjs';
 import { lawFamily } from '../flows/lawchain.mjs';
+import { suggestLaws } from '../flows/radar.mjs';
 import { searchOrgs, orgsInfo } from './orgs.mjs';
 import { consolidatedDoc } from '../flows/docset.mjs';
 import { summarizeLogs, typicalDurations } from './joblog.mjs';
@@ -34,6 +35,7 @@ export function parseLawOc(v) {
 }
 export function createRoutes({ sources: baseSources, jobs, workspace, env, flows, llmCounter = null, features = {}, logDir = null }) {
   let typicalCache = null;
+  const suggestCache = new Map();
   const srcFor = (req) => baseSources.withLawOc(parseLawOc(req.headers['x-law-oc']));
   const procedures = loadProcedures();
   const quota = createUploadQuota({ dailyBytes: (+env.UPLOAD_DAILY_MB || 300) * 1024 * 1024 });
@@ -107,6 +109,14 @@ export function createRoutes({ sources: baseSources, jobs, workspace, env, flows
       const r = await sources.searchRegs(q);
       if (q.corpus === 'bylaws' && !q.all_versions) { const { dedupeEditions } = await import('../flows/common.mjs'); r.rows = dedupeEditions(r.rows, { byArticle: true }); }
       sendJson(res, 200, r);
+    }],
+    // 시행예정 레이더에 넣을 법령 제안(법제처 시행일 기준 법령, 기관 유형별). 공개 자료라 기관 유형별로 6시간 같이 쓴다
+    ['POST', '/api/radar/suggest', async (req, res) => {
+      const b = await readJson(req), t = ['public-institution', 'central-ministry', 'local-gov'].includes(b.org_type) ? b.org_type : 'public-institution';
+      const hit = suggestCache.get(t); if (hit && Date.now() - hit.t < 6 * 3600e3) return sendJson(res, 200, hit.v);
+      const v = await suggestLaws(srcFor(req), { org_type: t });
+      if (!v.disabled && v.items.length) suggestCache.set(t, { t: Date.now(), v });
+      sendJson(res, 200, v);
     }],
     ['POST', '/api/law-versions', async (req, res) => { const sources = srcFor(req); const b = await readJson(req); sendJson(res, 200, await lawVersions(sources, { name: String(b.name || '').slice(0, 80), ref: String(b.ref || '').replace(/\s/g, ''), topic: String(b.topic || '').slice(0, 60) })); }],
     // 중앙행정기관 행정규칙·지방자치단체 자치법규 목록(법제처): org 가 있으면 그 기관 것만, q 는 제명 낱말

@@ -101,3 +101,11 @@ test('typical durations come from finished jobs without the time spent waiting f
     assert.deepEqual(j.amend, { ms: 35000, n: 3 }); assert.equal(j.check, undefined);
   } finally { await s.close(); }
 });
+
+test('radar law suggestions answer without a 법제처 key and never call it', async () => {
+  const s = await boot();
+  try {
+    const j = await (await post(s.base + '/api/radar/suggest', { org_type: 'local-gov' })).json();
+    assert.equal(j.disabled, true); assert.deepEqual(j.items, []);
+  } finally { await s.close(); }
+});

@@ -225,7 +225,7 @@ export const TOOLS = {
     desc: '곧 시행될 법령 판본을 직전 판본과 비교해 미리 정비할 기관 규정을 찾는다.', args: { laws: '["법령명"] 최대 3개(선택)', inst: '기관명(선택)' },
     async run(a, deps, st, ctx) {
       const run = deps.flows?.radar; if (!run) return { summary: '레이더 기능이 연결되어 있지 않습니다.' };
-      const r = await run(sub(ctx, { laws: Array.isArray(a.laws) ? a.laws.slice(0, 3) : undefined, inst: str(a.inst, 60) || undefined, auto: true }));
+      const r = await run(sub(ctx, { laws: Array.isArray(a.laws) && a.laws.length ? a.laws.slice(0, 3) : undefined, org_type: ctx.input?.profile?.type, inst: str(a.inst, 60) || undefined, auto: true }));
       st.radar = r;
       return { summary: `${r.note} · 시행예정 조문 ${r.items.length}개` };
     },
