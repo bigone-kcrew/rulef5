@@ -9,10 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
+import { MoreTrigger } from '@/components/more-trigger'
 import { api, fileToB64, EDITION, type Doc } from '@/lib/api'
 import { useApp } from '@/lib/app-state'
 
+// 바로 찾기 칩: 누르기 쉬운 높이(데스크톱 32px, 터치 40px)
+const CHIP = 'inline-flex h-8 items-center rounded-full border px-3 text-xs text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:h-10'
 type Item = { doc_id: string; title: string; sub: string; badge?: string; state?: string | null }
 export type Picked = { doc: Doc; uploads: string[]; refs: string[] }
 
@@ -31,6 +34,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
   const [lawq, setLawq] = useState('')
   const [targets, setTargets] = useState<string[]>(['law'])
   const [paste, setPaste] = useState('')
+  const [drag, setDrag] = useState(false)
   const [items, setItems] = useState<Record<string, Item[]>>({})
   const [msg, setMsg] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState<string | null>(null)
@@ -71,6 +75,12 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
       if (r.docs.length && multi) { const next = [...picked, ...r.docs.map((d: any) => d.doc_id)]; setPicked(next); onChange({ doc: { doc_id: next[0] } as Doc, uploads: next, refs: [] }) }
       if (r.docs.length && !multi) { const d = await api<Doc>('/api/doc?id=' + encodeURIComponent(r.docs[0].doc_id)); setDoc(d); onChange({ doc: d, uploads: ids, refs: [] }) }
     } catch (e) { setMsg({ ...msg, upload: (e as Error).message }) } finally { setLoading(null) }
+  }
+  // 끌어다 놓기는 accept 를 거치지 않으므로 확장자를 여기서 거른다
+  const pickFiles = async (list: FileList | null) => {
+    const fs = [...(list || [])].filter((f) => /\.(hwpx|txt|md)$/i.test(f.name)).slice(0, 20)
+    if (!fs.length) { if (list?.length) setMsg({ ...msg, upload: 'hwpx·txt·md 파일만 올릴 수 있습니다. 한글(hwp)은 hwpx로 저장해 올려 주세요.' }); return }
+    upload(await Promise.all(fs.map(async (f) => ({ name: f.name, base64: await fileToB64(f) }))))
   }
   const searchGov = async (o0?: string, k0?: string) => {
     const org = o0 ?? org0, kw = k0 ?? kw0
@@ -117,7 +127,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
     <div className="flex flex-col gap-4">
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         {sources.length > 1 && (
-          <TabsList className="h-auto w-full flex-wrap justify-start">
+          <TabsList className="w-full justify-start">
             {sources.includes('alio') && <TabsTrigger value="alio"><LandmarkIcon data-icon="inline-start" />기관 규정(ALIO)</TabsTrigger>}
             {sources.includes('gov') && <TabsTrigger value="gov"><LandmarkIcon data-icon="inline-start" />우리 기관 {govWord}(법제처)</TabsTrigger>}
             {sources.includes('upload') && <TabsTrigger value="upload"><FileUpIcon data-icon="inline-start" />파일·붙여넣기</TabsTrigger>}
@@ -126,32 +136,35 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
         )}
         <TabsContent value="alio" className="pt-2">
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); searchAlio() }}>
-            <Input className="w-56" placeholder="기관명 일부" value={inst} onChange={(e) => setInst(e.target.value)} maxLength={60} />
-            <Input className="min-w-40 flex-1" placeholder="규정명·주제(예: 취업규칙, 출산휴가)" value={kw} onChange={(e) => setKw(e.target.value)} maxLength={100} />
-            <Button type="submit" disabled={loading === 'alio'}>{loading === 'alio' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
+            <Input className="w-full sm:w-56" placeholder="기관명 일부" value={inst} onChange={(e) => setInst(e.target.value)} maxLength={60} />
+            <Input className="w-full sm:w-auto sm:min-w-40 sm:flex-1" placeholder="규정명·주제(예: 취업규칙, 출산휴가)" value={kw} onChange={(e) => setKw(e.target.value)} maxLength={100} />
+            <Button type="submit" className="w-full sm:w-auto" disabled={loading === 'alio'}>{loading === 'alio' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
-          {!items.alio?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 실제 공시 규정으로 해 보세요:</span>{[['창업진흥원', '복무규정'], ['한국전력공사', '취업규칙'], ['소상공인시장진흥공단', '복무규정']].map(([i, k]) => <button key={i} type="button" className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setInst(i); setKw(k); searchAlio(i, k) }}>{i} · {k}</button>)}</div>}
+          {!items.alio?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 실제 공시 규정으로 해 보세요:</span>{[['창업진흥원', '복무규정'], ['한국전력공사', '취업규칙'], ['소상공인시장진흥공단', '복무규정']].map(([i, k]) => <button key={i} type="button" className={CHIP} onClick={() => { setInst(i); setKw(k); searchAlio(i, k) }}>{i} · {k}</button>)}</div>}
           {list('alio')}
         </TabsContent>
         <TabsContent value="gov" className="pt-2">
           <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); searchGov() }}>
-            <Input className="w-56" placeholder={profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시)' : '부처명(예: 고용노동부)'} value={org} onChange={(e) => setOrg(e.target.value)} maxLength={60} />
-            <Input className="min-w-40 flex-1" placeholder={profile.type === 'local-gov' ? '조례·규칙 제명 낱말(예: 복무, 문서)' : '훈령·예규·고시 제명 낱말(예: 공무직, 감사)'} value={kw} onChange={(e) => setKw(e.target.value)} maxLength={60} />
-            <Button type="submit" disabled={loading === 'gov'}>{loading === 'gov' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
+            <Input className="w-full sm:w-56" placeholder={profile.type === 'local-gov' ? '지방자치단체명(예: 경기도 수원시)' : '부처명(예: 고용노동부)'} value={org} onChange={(e) => setOrg(e.target.value)} maxLength={60} />
+            <Input className="w-full sm:w-auto sm:min-w-40 sm:flex-1" placeholder={profile.type === 'local-gov' ? '조례·규칙 제명 낱말(예: 복무, 문서)' : '훈령·예규·고시 제명 낱말(예: 공무직, 감사)'} value={kw} onChange={(e) => setKw(e.target.value)} maxLength={60} />
+            <Button type="submit" className="w-full sm:w-auto" disabled={loading === 'gov'}>{loading === 'gov' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
           <p className="mt-1 text-xs text-muted-foreground">법제처 국가법령정보의 현행 {govWord}를 제명으로 찾습니다. 기관명을 비우면 모든 기관에서 찾습니다.</p>
-          {!items.gov?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 이렇게 찾아 보세요:</span>{(profile.type === 'local-gov' ? [['경기도 수원시', '당직'], ['서울특별시', '복무']] : [['고용노동부', '당직'], ['행정안전부', '공무직']]).map(([o, k]) => <button key={o} type="button" className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => { setOrg(o); setKw(k); searchGov(o, k) }}>{o} · {k}</button>)}</div>}
+          {!items.gov?.length && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span>처음이라면 이렇게 찾아 보세요:</span>{(profile.type === 'local-gov' ? [['경기도 수원시', '당직'], ['서울특별시', '복무']] : [['고용노동부', '당직'], ['행정안전부', '공무직']]).map(([o, k]) => <button key={o} type="button" className={CHIP} onClick={() => { setOrg(o); setKw(k); searchGov(o, k) }}>{o} · {k}</button>)}</div>}
           {list('gov')}
         </TabsContent>
         <TabsContent value="upload" className="flex flex-col gap-2 pt-2">
-          <p className="text-sm text-muted-foreground">hwpx·txt·md(여러 개 가능) 또는 원문 붙여넣기. 원본은 읽기 전용으로 보관(SHA-256 기록)하고 결과는 별도로 만듭니다. 한글(hwp)은 hwpx로 저장해 올려 주세요.</p>
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-6 text-sm text-muted-foreground transition-colors hover:bg-muted/50">
-            {loading === 'upload' ? <Spinner /> : <FileUpIcon />}
-            <span>여기를 눌러 파일 선택</span>
-            <input type="file" multiple accept=".hwpx,.txt,.md" hidden onChange={async (e) => { const fs = [...(e.target.files || [])].slice(0, 20); if (fs.length) upload(await Promise.all(fs.map(async (f) => ({ name: f.name, base64: await fileToB64(f) })))); e.target.value = '' }} />
+          <p className="text-sm text-muted-foreground">원본은 읽기 전용으로 보관(SHA-256 기록)하고 결과는 별도로 만듭니다. 한글(hwp)은 hwpx로 저장해 올려 주세요.</p>
+          <label className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed p-6 text-sm text-muted-foreground transition-colors hover:border-primary/60 hover:bg-muted/50 ${drag ? 'border-primary bg-primary/5 text-foreground' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); pickFiles(e.dataTransfer.files) }}>
+            {loading === 'upload' ? <Spinner /> : <FileUpIcon className="size-6" />}
+            <span className="font-medium text-foreground">{drag ? '여기에 놓으세요' : '파일을 끌어다 놓거나 눌러서 선택'}</span>
+            <span className="text-xs">hwpx · txt · md · 여러 개 가능(최대 20개)</span>
+            <input type="file" multiple accept=".hwpx,.txt,.md" hidden onChange={(e) => { pickFiles(e.target.files); e.target.value = '' }} />
           </label>
-          <Textarea rows={4} placeholder="규정 원문 붙여넣기 — 첫 줄은 제목, 이어서 제1조(목적) … 형식" value={paste} onChange={(e) => setPaste(e.target.value)} />
-          <div className="flex justify-end"><Button variant="secondary" disabled={!paste.trim() || loading === 'upload'} onClick={() => upload([{ name: '붙여넣기.txt', text: paste }])}>붙여넣은 원문 사용</Button></div>
+          <div className="mt-2 text-sm font-medium">또는 원문 붙여넣기</div>
+          <Textarea rows={4} placeholder="첫 줄은 제목, 이어서 제1조(목적) … 형식" value={paste} onChange={(e) => setPaste(e.target.value)} />
+          <div className="flex justify-end"><Button variant="secondary" className="w-full sm:w-auto" disabled={!paste.trim() || loading === 'upload'} onClick={() => upload([{ name: '붙여넣기.txt', text: paste }])}>붙여넣은 원문 사용</Button></div>
           {list('upload')}
         </TabsContent>
         <TabsContent value="law" className="pt-2">
@@ -160,7 +173,7 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
             <Button type="submit" disabled={loading === 'law'}>{loading === 'law' ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
           <div className="mt-2 flex flex-wrap gap-4 text-sm">
-            {[['law', '법령'], ['admrul', '행정규칙(부처)'], ['ordin', '자치법규(지방자치단체)']].map(([v, l]) => <label key={v} className="flex items-center gap-2"><Checkbox checked={targets.includes(v)} onCheckedChange={(c) => setTargets(c ? [...targets, v] : targets.filter((x) => x !== v))} />{l}</label>)}
+            {[['law', '법령'], ['admrul', '행정규칙(부처)'], ['ordin', '자치법규(지방자치단체)']].map(([v, l]) => <label key={v} className="flex min-h-8 items-center gap-2 pointer-coarse:min-h-11"><Checkbox checked={targets.includes(v)} onCheckedChange={(c) => setTargets(c ? [...targets, v] : targets.filter((x) => x !== v))} />{l}</label>)}
           </div>
           {list('law')}
         </TabsContent>
@@ -176,10 +189,10 @@ export function TargetPicker({ onChange, showArticles = false, multi = false, in
                   {doc.edition?.warning && <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground"><TriangleAlertIcon className="size-4" />{doc.edition.warning}</p>}
                   {showArticles && (
                     <Collapsible className="mt-2">
-                      <CollapsibleTrigger render={<Button variant="link" size="sm" className="px-0" />}>조문 직접 지정(선택 — 비우면 에이전트가 찾습니다){refs.length ? ` · ${refs.length}개 선택` : ''}</CollapsibleTrigger>
+                      <MoreTrigger>조문 직접 지정(선택 — 비우면 에이전트가 찾습니다){refs.length ? ` · ${refs.length}개 선택` : ''}</MoreTrigger>
                       <CollapsibleContent>
                         <div className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto rounded-lg border bg-background p-2 text-sm">
-                          {main.map((a) => <label key={a.ref!} className="flex items-start gap-2 rounded px-1 py-0.5 hover:bg-muted"><Checkbox checked={refs.includes(a.ref!)} onCheckedChange={(c) => { const n = c ? [...refs, a.ref!] : refs.filter((x) => x !== a.ref); setRefs(n); onChange({ doc, uploads, refs: n }) }} /><span><b>{a.ref}</b>({a.title}) <span className="text-muted-foreground">{a.body.slice(0, 50)}</span></span></label>)}
+                          {main.map((a) => <label key={a.ref!} className="flex items-start gap-2 rounded px-1 py-1 hover:bg-muted pointer-coarse:py-2.5"><Checkbox checked={refs.includes(a.ref!)} onCheckedChange={(c) => { const n = c ? [...refs, a.ref!] : refs.filter((x) => x !== a.ref); setRefs(n); onChange({ doc, uploads, refs: n }) }} /><span><b>{a.ref}</b>({a.title}) <span className="text-muted-foreground">{a.body.slice(0, 50)}</span></span></label>)}
                         </div>
                       </CollapsibleContent>
                     </Collapsible>

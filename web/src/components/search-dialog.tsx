@@ -61,11 +61,11 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); run(0) }}>
           <div className="flex gap-2"><Input ref={input} value={q} onChange={(e) => setQ(e.target.value)} maxLength={200} placeholder="예: 배우자 출산휴가 · 육아휴직 대체인력 · 당직 휴무" /><Button type="submit" disabled={!q.trim() || busy}>{busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}검색</Button></div>
           <div className="flex flex-wrap items-center gap-2">
-            <select aria-label="자료 범위" value={corpus} onChange={(e) => { const v = e.target.value; if ((v === 'ordin' || v === 'admrul') !== isGov) setInst(''); setCorpus(v); setRows(null) }} className="h-8 rounded-md border bg-background px-2 text-sm">{corpora.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
-            {!isGov && <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline" size="sm">{MODES.map(([v, l, t]) => <ToggleGroupItem key={v} value={v} title={t}>{l}</ToggleGroupItem>)}</ToggleGroup>}
+            <select aria-label="자료 범위" value={corpus} onChange={(e) => { const v = e.target.value; if ((v === 'ordin' || v === 'admrul') !== isGov) setInst(''); setCorpus(v); setRows(null) }} className="h-9 rounded-md border bg-background px-2 text-sm">{corpora.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            {!isGov && <ToggleGroup value={[mode]} onValueChange={(v: string[]) => v[0] && setMode(v[0])} variant="outline">{MODES.map(([v, l, t]) => <ToggleGroupItem key={v} value={v} title={t}>{l}</ToggleGroupItem>)}</ToggleGroup>}
             <label className="flex items-center gap-1.5 text-sm"><Checkbox checked={body} onCheckedChange={(c) => setBody(!!c)} />본문까지</label>
             {!isGov && <label className="flex items-center gap-1.5 text-sm" title="기관마다 가장 관련 높은 1건만 — 여러 기관 사례를 비교할 때"><Checkbox checked={group} onCheckedChange={(c) => setGroup(!!c)} />기관별 1건</label>}
-            <select aria-label="결과 수" value={limit} onChange={(e) => setLimit(+e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm">{[15, 30, 50, 100].map((n) => <option key={n} value={n}>{n}건</option>)}</select>
+            <select aria-label="결과 수" value={limit} onChange={(e) => setLimit(+e.target.value)} className="h-9 rounded-md border bg-background px-2 text-sm">{[15, 30, 50, 100].map((n) => <option key={n} value={n}>{n}건</option>)}</select>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <InstPicker lazy type={isGov ? profile.type : 'public-institution'} value={inst} onPick={(_, t) => setInst(t)} placeholder={isGov ? (profile.type === 'local-gov' ? '지방자치단체(선택) 예: 경기도 수원시' : '부처(선택) 예: 고용노동부') : '기관(선택) 예: 근로복지공단'} />
@@ -77,7 +77,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span>{shown.length}건{ms != null ? ` · ${(ms / 1000).toFixed(1)}초` : ''}{isGov ? ' · 법제처(문서 단위)' : ''}</span>
-              <select aria-label="정렬" value={sort} onChange={(e) => setSort(e.target.value)} className="ml-auto h-7 rounded-md border bg-background px-2 text-xs"><option value="relevance">관련도순</option><option value="recent">최신순</option></select>
+              <select aria-label="정렬" value={sort} onChange={(e) => setSort(e.target.value)} className="ml-auto h-8 rounded-md border bg-background px-2 text-xs"><option value="relevance">관련도순</option><option value="recent">최신순</option></select>
               {shown.length > 0 && <Button variant="outline" size="xs" onClick={() => download(`원문검색_${q.trim().slice(0, 20)}.csv`, tableCsv(shown.map((r) => ({ ...r, excerpt: String(r.body || '').replace(/\s+/g, ' ').slice(0, 300) })), [['inst_name', '기관'], ['doc_title', '문서'], ['art_ref', '조문'], ['art_title', '제목'], ['corpus', '자료'], ['effective_from', '시행일'], ['excerpt', '발췌']]), 'text/csv')}><DownloadIcon data-icon="inline-start" />CSV</Button>}
             </div>
             {!shown.length && <p className="text-sm text-muted-foreground">{isGov ? `결과가 없습니다. 낱말을 줄이거나 ${inst ? '기관 이름을 비워' : '「본문까지」를 켜'} 보세요.` : '결과가 없습니다. 검색 방식을 「의미」나 「통합」으로 바꾸거나 낱말을 줄여 보세요.'}</p>}

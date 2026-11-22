@@ -60,7 +60,7 @@ export default function ImpactView() {
       <Card>
         <CardHeader><CardTitle>시행예정 레이더</CardTitle><CardDescription>곧 시행될 법령 판본을 바로 앞 판본과 조문 단위로 비교해, 미리 정비할 기관 규정과 착수 권장일(시행 30일 전)을 정리합니다. 법령은 3개까지.</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => setRlaws(e.target.value)} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button variant="secondary" disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
+          <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => setRlaws(e.target.value)} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
           <JobTimeline job={radar.job} error={radar.error} startedAt={radar.startedAt} onAnswer={radar.answer} onRetry={radar.canRetry ? radar.retry : undefined} title="시행예정 레이더" />
           {rr && (
             <div className="flex flex-col gap-2">
@@ -83,7 +83,7 @@ export default function ImpactView() {
             <Input className="min-w-56 flex-1" placeholder="법령명(예: 남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률)" value={vq.name} onChange={(e) => setVq({ ...vq, name: e.target.value })} />
             <Input className="w-32" placeholder="제18조의2" value={vq.ref} onChange={(e) => setVq({ ...vq, ref: e.target.value })} />
             <Input className="w-40" placeholder="주제(예: 배우자 출산)" value={vq.topic} onChange={(e) => setVq({ ...vq, topic: e.target.value })} />
-            <Button type="submit" variant="secondary" disabled={vbusy || !vq.name.trim() || !vq.ref.trim()}>{vbusy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}판본 불러오기</Button>
+            <Button type="submit" disabled={vbusy || !vq.name.trim() || !vq.ref.trim()}>{vbusy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}판본 불러오기</Button>
           </form>
           {vmsg && <p className="text-sm text-muted-foreground">{vmsg}</p>}
           {vers && (
@@ -101,7 +101,7 @@ export default function ImpactView() {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader><StepTitle n={2}>상위 법령의 개정 전·후 조문</StepTitle><CardDescription>바뀐 조문을 넣으면 같은 사항을 정한 기관 규정 조문을 찾아 아직 반영되지 않은 곳을 개정 후보로 표시합니다. <Button variant="link" size="xs" className="px-0" onClick={() => { setLaw(EX.law); setBefore(EX.before); setAfter(EX.after); setTopic(EX.topic) }}>예시 채우기</Button></CardDescription></CardHeader>
+        <CardHeader><StepTitle n={2}>상위 법령의 개정 전·후 조문</StepTitle><CardDescription>바뀐 조문을 넣으면 같은 사항을 정한 기관 규정 조문을 찾아 아직 반영되지 않은 곳을 개정 후보로 표시합니다. <Button variant="outline" size="xs" className="ml-1" onClick={() => { setLaw(EX.law); setBefore(EX.before); setAfter(EX.after); setTopic(EX.topic) }}>예시 채우기</Button></CardDescription></CardHeader>
         <CardContent>
           <FieldGroup>
             <Field><FieldLabel htmlFor="im-law">법령명·조문</FieldLabel><Input id="im-law" maxLength={80} value={law} onChange={(e) => setLaw(e.target.value)} placeholder="예: 남녀고용평등법 제18조의2" /></Field>

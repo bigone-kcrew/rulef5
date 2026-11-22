@@ -2,14 +2,15 @@
 import { DocLink } from '@/components/doc-viewer'
 import { Fragment, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CheckIcon, XIcon, MinusIcon, HandIcon, FileSearchIcon, ChevronDownIcon, TerminalIcon, RotateCwIcon } from 'lucide-react'
+import { CheckIcon, XIcon, MinusIcon, HandIcon, FileSearchIcon, TerminalIcon, RotateCwIcon, ArrowLeftIcon, ArrowRightIcon } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
+import { MoreTrigger } from '@/components/more-trigger'
 import type { Gate, Job } from '@/lib/api'
 
 // 끝난 작업은 서버가 잰 시간(시작~마지막 갱신)을 보여 준다 — 새로 고친 뒤에도 시간이 늘지 않게
@@ -19,7 +20,7 @@ function Elapsed({ since, stop, span }: { since: number; stop: boolean; span?: n
   return <span className="tabular-nums">{Math.round((stop && span != null ? span : (stop ? now : Date.now()) - since) / 1000)}초</span>
 }
 
-function GateCard({ gate, onAnswer }: { gate: Gate; onAnswer: (v: unknown) => Promise<void> }) {
+function GateCard({ gate, onAnswer, onBack }: { gate: Gate; onAnswer: (v: unknown) => Promise<void>; onBack?: () => void }) {
   const [sel, setSel] = useState<string[]>(() => (gate.options || []).filter((o) => o.checked).map((o) => o.value))
   const [sending, setSending] = useState(false)
   const toggle = (v: string, c: boolean) => setSel((cur) => (gate.multi ? (c ? [...cur, v] : cur.filter((x) => x !== v)) : c ? [v] : []))
@@ -50,18 +51,21 @@ function GateCard({ gate, onAnswer }: { gate: Gate; onAnswer: (v: unknown) => Pr
           </motion.label>
         </Fragment>))}
       </div>
-      <div className="mt-3 flex items-center gap-2">
-        {gate.multi && <Button variant="ghost" size="sm" onClick={() => setSel((gate.options || []).map((o) => o.value))}>모두 선택</Button>}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {gate.multi && <Button variant="outline" size="sm" onClick={() => setSel((gate.options || []).map((o) => o.value))}>모두 선택</Button>}
         <span className="text-xs text-muted-foreground">{sel.length}개 선택</span>
         <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">Enter 확인 · 숫자 키 선택</span>
-        <Button disabled={sending} onClick={send}>{sending && <Spinner data-icon="inline-start" />}확인하고 계속</Button>
+      </div>
+      <div className="mt-3 flex flex-col-reverse gap-2 border-t border-primary/20 pt-3 sm:flex-row sm:items-center">
+        {onBack && <Button variant="outline" onClick={onBack}><ArrowLeftIcon data-icon="inline-start" />입력 고치기</Button>}
+        <Button size="lg" className="px-4 sm:ml-auto" disabled={sending} onClick={send}>{sending && <Spinner data-icon="inline-start" />}확인하고 계속<ArrowRightIcon data-icon="inline-end" /></Button>
       </div>
     </motion.div>
   )
 }
 
 const ICON = { running: Spinner, done: CheckIcon, failed: XIcon, skipped: MinusIcon }
-export function JobTimeline({ job, error, startedAt, onAnswer, onRetry, title = '에이전트 작업' }: { job: Job | null; error: string | null; startedAt: number | null; onAnswer: (gate: string, v: unknown) => Promise<void>; onRetry?: () => void; title?: string }) {
+export function JobTimeline({ job, error, startedAt, onAnswer, onRetry, onBack, title = '에이전트 작업' }: { job: Job | null; error: string | null; startedAt: number | null; onAnswer: (gate: string, v: unknown) => Promise<void>; onRetry?: () => void; onBack?: () => void; title?: string }) {
   if (!startedAt) return null
   const status = error ? 'failed' : job?.status || 'running'
   const done = job?.steps.filter((s) => s.state === 'done').length || 0
@@ -94,7 +98,7 @@ export function JobTimeline({ job, error, startedAt, onAnswer, onRetry, title = 
                     {s.note && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`mt-0.5 whitespace-pre-wrap text-sm ${s.state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}`}>{s.note}</motion.p>}
                     {s.evidence?.length > 0 && (
                       <Collapsible className="mt-1.5">
-                        <CollapsibleTrigger render={<Button variant="ghost" size="xs" className="-ml-2 text-muted-foreground" />}><FileSearchIcon data-icon="inline-start" />근거·출처 {s.evidence.length}건<ChevronDownIcon data-icon="inline-end" /></CollapsibleTrigger>
+                        <MoreTrigger icon={<FileSearchIcon data-icon="inline-start" />}>근거·출처 {s.evidence.length}건</MoreTrigger>
                         <CollapsibleContent>
                           <div className="mt-1 grid gap-1.5 sm:grid-cols-2">
                             {s.evidence.map((e, k) => <motion.div key={k} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: k * 0.04 }} className="rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs"><div className="font-medium"><DocLink docId={e.doc_id} refName={e.ref}>{e.label}</DocLink></div><div className="truncate text-muted-foreground">{e.doc_id}{e.edition ? ` · ${e.edition}` : ''}</div></motion.div>)}
@@ -108,11 +112,11 @@ export function JobTimeline({ job, error, startedAt, onAnswer, onRetry, title = 
             })}
           </AnimatePresence>
         </ol>
-        <AnimatePresence>{job?.status === 'waiting' && job.gate && <GateCard key={job.gate.id} gate={job.gate} onAnswer={(v) => onAnswer(job.gate!.id, v)} />}</AnimatePresence>
+        <AnimatePresence>{job?.status === 'waiting' && job.gate && <GateCard key={job.gate.id} gate={job.gate} onBack={onBack} onAnswer={(v) => onAnswer(job.gate!.id, v)} />}</AnimatePresence>
         {job?.status === 'failed' && <Alert variant="destructive"><AlertTitle>작업이 중단되었습니다</AlertTitle><AlertDescription>{job.error?.message}{/llm_(timeout|truncated|rate|unavailable)/.test(job.error?.code || '') ? ' 모델 응답이 늦거나 끊겼습니다. 다시 시도하거나 상단 「모델」에서 빠른 모델(GPT-OSS 등)로 바꿔 보세요.' : ''}</AlertDescription>{onRetry && <Button className="mt-2" size="sm" variant="outline" onClick={onRetry}><RotateCwIcon data-icon="inline-start" />다시 시도</Button>}</Alert>}
         {!!job?.logs?.length && (
           <Collapsible>
-            <CollapsibleTrigger render={<Button variant="ghost" size="sm" className="text-muted-foreground" />}><TerminalIcon data-icon="inline-start" />실행 기록 {job.logs.length}건</CollapsibleTrigger>
+            <MoreTrigger icon={<TerminalIcon data-icon="inline-start" />}>실행 기록 {job.logs.length}건</MoreTrigger>
             <CollapsibleContent><pre className="mt-1 max-h-64 overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs leading-relaxed text-zinc-200">{job.logs.map((l) => l.text).join('\n')}</pre></CollapsibleContent>
           </Collapsible>
         )}

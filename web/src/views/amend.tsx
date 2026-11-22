@@ -6,7 +6,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
+import { MoreTrigger } from '@/components/more-trigger'
 import { Spinner } from '@/components/ui/spinner'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TargetPicker, type Picked } from '@/components/target-picker'
@@ -39,9 +40,9 @@ export function AmendForm({ preset, busy, onRun }: { preset?: AmendPreset | null
           </Field>
         </FieldGroup>
         <Collapsible>
-          <CollapsibleTrigger render={<Button variant="link" size="sm" className="px-0 text-muted-foreground" />}>고급 옵션</CollapsibleTrigger>
+          <MoreTrigger>고급 옵션</MoreTrigger>
           <CollapsibleContent>
-            <label className="flex items-center gap-2 pt-2 text-sm"><Checkbox checked={lawTarget} onCheckedChange={(c) => setLawTarget(!!c)} />법령·행정규칙·자치법규도 고칠 대상으로 고르기(법령 단위)</label>
+            <label className="mt-2 flex min-h-8 items-center gap-2 text-sm pointer-coarse:min-h-11"><Checkbox checked={lawTarget} onCheckedChange={(c) => setLawTarget(!!c)} />법령·행정규칙·자치법규도 고칠 대상으로 고르기(법령 단위)</label>
             <Field className="pt-3">
               <FieldLabel>조문을 새로 넣을 때</FieldLabel>
               <ToggleGroup value={[renumber]} onValueChange={(v: string[]) => v[0] && setRenumber(v[0])} variant="outline" className="flex-wrap">
@@ -57,7 +58,7 @@ export function AmendForm({ preset, busy, onRun }: { preset?: AmendPreset | null
         <FastToggle fast={fast} setFast={setFast} />
         {!picked && <span className="text-sm text-muted-foreground">먼저 규정을 고르세요</span>}
         {picked && !intent.trim() && <span className="text-sm text-muted-foreground">바꿀 내용을 적으세요</span>}
-        <Button size="lg" disabled={!picked || !intent.trim() || busy} onClick={() => picked && onRun({ doc_id: picked.doc.doc_id, intent: intent.trim(), refs: picked.refs, renumber: renumber === 'true', extraDocIds: picked.uploads.filter((d) => d !== picked.doc.doc_id), auto: fast || undefined })}>
+        <Button size="lg" className="w-full px-4 sm:w-auto" disabled={!picked || !intent.trim() || busy} onClick={() => picked && onRun({ doc_id: picked.doc.doc_id, intent: intent.trim(), refs: picked.refs, renumber: renumber === 'true', extraDocIds: picked.uploads.filter((d) => d !== picked.doc.doc_id), auto: fast || undefined })}>
           {busy ? <Spinner data-icon="inline-start" /> : <CornerDownLeftIcon data-icon="inline-start" />}초안 만들기
         </Button>
       </div>

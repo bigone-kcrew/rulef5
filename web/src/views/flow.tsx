@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Keycap } from '@/components/keycap'
 import { JobTimeline } from '@/components/job-timeline'
 import { DocActions, DocEditor } from '@/components/doc-editor'
@@ -98,7 +99,10 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
   const reachable = (id: string) => id === 'prepare' || (id === 'draft' ? !!job.startedAt || !!flow.result : !!flow.result)
   const go = (id: string) => { if (reachable(id)) { setFlow((f) => ({ ...f, step: id })); window.scrollTo({ top: 0, behavior: 'smooth' }) } }
   const complete = () => { const next = steps[idx + 1]; setFlow((f) => ({ ...f, done: [...new Set([...f.done, cur.id])], step: next ? next.id : 'finished' })); window.scrollTo({ top: 0, behavior: 'smooth' }) }
-  const restart = () => { if (flow.result && !window.confirm('지금까지의 초안과 고친 내용을 지우고 새로 시작할까요?')) return; job.reset(); opinions.reset(); setOpText(''); setFlow(EMPTY); setFormKey((k) => k + 1) }
+  // 새로 시작: 초안이 있으면 앱 확인창으로 한 번 더 묻는다(지운 초안은 되돌릴 수 없다)
+  const [askRestart, setAskRestart] = useState(false)
+  const doRestart = () => { setAskRestart(false); job.reset(); opinions.reset(); setOpText(''); setFlow(EMPTY); setFormKey((k) => k + 1) }
+  const restart = () => (flow.result ? setAskRestart(true) : doRestart())
   const sec = (id: string) => flow.sections?.find((s) => s.id === id)
   const update = (s: Section) => setFlow((f) => ({ ...f, sections: (f.sections || []).map((x) => (x.id === s.id ? s : x)) }))
   // 개정 후 전문 다시 만들기: 화면에서 고친 신구조문대비표(개정안 칸)를 조문 본문으로 되돌려 원 규정 전체에 다시 반영한다(모델 없이)
@@ -121,7 +125,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
       <nav aria-label="절차 단계" className="min-w-0 lg:sticky lg:top-32 lg:self-start">
         <div className="mb-2 flex items-center justify-between gap-2 px-1">
           <div className="min-w-0 text-sm"><span className="font-semibold">{mode === 'amend' ? '개정' : '제정'} 절차</span> <span className="text-muted-foreground">· {proc.name.replace(/ 제·개정 절차$/, '')}</span></div>
-          <Button variant="ghost" size="xs" onClick={restart}><RotateCcwIcon data-icon="inline-start" />새로 시작</Button>
+          <Button variant="ghost" size="sm" onClick={restart}><RotateCcwIcon data-icon="inline-start" />새로 시작</Button>
         </div>
         <ol className="flex gap-1.5 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
           {steps.map((s, i) => {
@@ -157,9 +161,9 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
           ) : cur.id === 'draft' ? (
             <StepPanel key="draft" title={`${idx + 1}. ${cur.title}`} hint={cur.hint}>
               <div className="flex flex-col gap-4">
-                <JobTimeline job={job.job} error={job.error} startedAt={job.startedAt} onAnswer={job.answer} onRetry={job.canRetry ? job.retry : undefined} title={mode === 'amend' ? '개정 초안 작업' : '제정 초안 작업'} />
+                <JobTimeline job={job.job} error={job.error} startedAt={job.startedAt} onAnswer={job.answer} onRetry={job.canRetry ? job.retry : undefined} onBack={() => go('prepare')} title={mode === 'amend' ? '개정 초안 작업' : '제정 초안 작업'} />
                 {!job.startedAt && !flow.result && <p className="text-sm text-muted-foreground">아직 시작하지 않았습니다. 이전 단계에서 「초안 만들기」를 누르세요.</p>}
-                <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => go('prepare')}><ArrowLeftIcon data-icon="inline-start" />입력 고치기</Button>{flow.result && <Button onClick={() => go('review')}>초안 검토로<ArrowRightIcon data-icon="inline-end" /></Button>}</div>
+                <div className="flex flex-wrap gap-2">{job.job?.status !== 'waiting' && <Button variant="outline" onClick={() => go('prepare')}><ArrowLeftIcon data-icon="inline-start" />입력 고치기</Button>}{flow.result && <Button onClick={() => go('review')}>초안 검토로<ArrowRightIcon data-icon="inline-end" /></Button>}</div>
               </div>
             </StepPanel>
           ) : cur.id === 'review' ? (
@@ -169,10 +173,10 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                   {([[mode === 'amend' ? '바뀌는 조문' : '조문', new Set((sec('comparison')?.rows || []).filter((r) => r.newHtml !== '(현행과 같음)').map((r) => r.ref)).size], ['대비표 행', sec('comparison')?.rows?.length || 0], ['근거 자료', flow.result?.docset.evidence?.length || 0], ['확인할 점', (sec('checklist')?.body || '').split('\n').filter((l) => l.startsWith('☐')).length]] as [string, number][]).map(([l, v]) => <div key={l} className="bg-card p-3"><dt className="text-xs text-muted-foreground">{l}</dt><dd className="font-mono text-2xl font-semibold tabular-nums">{v}</dd></div>)}
                 </dl>
                 <Tabs defaultValue={CORE.find((id) => sec(id))}>
-                  <TabsList className="flex-wrap">{CORE.filter((id) => sec(id)).map((id) => <TabsTrigger key={id} value={id}>{sec(id)!.title}</TabsTrigger>)}</TabsList>
+                  <TabsList>{CORE.filter((id) => sec(id)).map((id) => <TabsTrigger key={id} value={id}>{sec(id)!.title}</TabsTrigger>)}</TabsList>
                   {CORE.filter((id) => sec(id)).map((id) => <TabsContent key={id} value={id} className="rounded-md border bg-background p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} /></TabsContent>)}
                 </Tabs>
-                {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표·부칙을 고쳤다면(개정문만 고쳤다면 대비표에도 같게 고친 뒤)</span><Button variant="outline" size="xs" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
+                {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표·부칙을 고쳤다면(개정문만 고쳤다면 대비표에도 같게 고친 뒤)</span><Button variant="outline" size="sm" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
                 <section className="flex flex-col gap-2">
                   <h3 className="flex items-center gap-2 font-semibold"><ListChecksIcon className="size-4" />확인할 점</h3>
                   {CHECKS.filter((id) => sec(id)).map((id, i) => (
@@ -205,7 +209,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                       <section className="flex flex-col gap-2">
                         <h3 className="font-semibold">이 단계 문서 <span className="text-sm font-normal text-muted-foreground">— 빈칸(번호·날짜·담당 부서)을 채워 쓰세요</span></h3>
                         <Tabs defaultValue={forms[0]} key={forms.join()}>
-                          {forms.length > 1 && <TabsList className="flex-wrap">{forms.map((d: string) => <TabsTrigger key={d} value={d}>{sec(d)!.title}</TabsTrigger>)}</TabsList>}
+                          {forms.length > 1 && <TabsList>{forms.map((d: string) => <TabsTrigger key={d} value={d}>{sec(d)!.title}</TabsTrigger>)}</TabsList>}
                           {forms.map((d: string) => <TabsContent key={d} value={d} className="rounded-md border bg-background p-3 sm:p-4">{forms.length === 1 && <div className="mb-2 text-sm font-medium text-muted-foreground">{sec(d)!.title}</div>}<DocEditor section={sec(d)!} onChange={update} /></TabsContent>)}
                         </Tabs>
                       </section>
@@ -237,6 +241,12 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
           )}
         </AnimatePresence>
       </div>
+      <Dialog open={askRestart} onOpenChange={setAskRestart}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>새로 시작할까요?</DialogTitle><DialogDescription>지금까지 만든 초안과 화면에서 고친 내용이 지워지며 되돌릴 수 없습니다. 필요하면 먼저 문서를 내려받으세요.</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" onClick={() => setAskRestart(false)}>취소</Button><Button variant="destructive" onClick={doRestart}><RotateCcwIcon data-icon="inline-start" />지우고 새로 시작</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -9,7 +9,7 @@ export function useFast() {
 }
 export function FastToggle({ fast, setFast }: { fast: boolean; setFast: (v: boolean) => void }) {
   return (
-    <label className="flex items-center gap-1.5 text-sm text-muted-foreground" title="켜면 조문·근거 확인 없이 AI 추천대로 끝까지 만듭니다. 결과의 검토 체크리스트와 대비표로 확인하세요.">
+    <label className="flex min-h-8 cursor-pointer items-center gap-1.5 text-sm text-muted-foreground pointer-coarse:min-h-11" title="켜면 조문·근거 확인 없이 AI 추천대로 끝까지 만듭니다. 결과의 검토 체크리스트와 대비표로 확인하세요.">
       <Checkbox checked={fast} onCheckedChange={(c) => setFast(!!c)} />추천대로 진행(확인 생략)
     </label>
   )

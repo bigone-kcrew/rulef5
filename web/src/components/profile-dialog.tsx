@@ -49,10 +49,10 @@ export function ProfileDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         </FieldGroup>
         <DialogFooter className="sm:justify-between">
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => download('기관프로필.json', JSON.stringify(p, null, 2), 'application/json')}>내보내기</Button>
-            <Button variant="ghost" size="sm" render={<label />}>가져오기<input type="file" accept="application/json" hidden onChange={async (e) => { try { const x = JSON.parse(await e.target.files![0].text()); if (!x.name || !procedures[x.type]) throw 0; setP(x) } catch { alert('프로필 JSON 형식이 올바르지 않습니다.') } }} /></Button>
+            <Button variant="outline" size="sm" onClick={() => download('기관프로필.json', JSON.stringify(p, null, 2), 'application/json')}>내보내기</Button>
+            <Button variant="outline" size="sm" render={<label />}>가져오기<input type="file" accept="application/json" hidden onChange={async (e) => { try { const x = JSON.parse(await e.target.files![0].text()); if (!x.name || !procedures[x.type]) throw 0; setP(x) } catch { alert('프로필 JSON 형식이 올바르지 않습니다.') } }} /></Button>
           </div>
-          <Button onClick={() => { const name = p.name?.trim() || profiles.find((x) => x.type === p.type)?.name || '예시 기관'; setProfile({ ...p, name, id: 'custom' }); onOpenChange(false) }}>저장</Button>
+          <Button size="lg" className="px-5" onClick={() => { const name = p.name?.trim() || profiles.find((x) => x.type === p.type)?.name || '예시 기관'; setProfile({ ...p, name, id: 'custom' }); onOpenChange(false) }}>저장</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

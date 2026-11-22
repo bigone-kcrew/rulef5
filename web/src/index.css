@@ -138,6 +138,11 @@
 @media (prefers-reduced-motion: reduce) { .cmp u { animation: none; } }
 /* 세로 스크롤바 자리를 늘 비워 둔다 — 긴 화면(F5 시작)과 짧은 화면 사이를 오갈 때 가운데 정렬 내용이 좌우로 밀리지 않게 */
 html { scrollbar-gutter: stable; }
+/* 체크박스를 감싼 글귀 전체를 누를 수 있게: 데스크톱 32px, 터치 화면 44px 높이 */
+label:has(> [data-slot="checkbox"]) { min-height: 2rem; flex-shrink: 0; cursor: pointer; }
+@media (pointer: coarse) { label:has(> [data-slot="checkbox"]) { min-height: 2.75rem; } }
+/* 옆으로 미는 줄(F키 메뉴 등): 더 있으면 오른쪽 끝을 흐리게 */
+.fade-end { mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent); }
 body { line-height: 1.6; -webkit-font-smoothing: antialiased; font-feature-settings: "ss06", "tnum"; word-break: keep-all; overflow-wrap: anywhere; }
 /* 키: 누르면 내려가는 키보드 키 */
 .key { border: 1px solid var(--color-border); border-bottom-width: 3px; border-radius: var(--radius-md); background: var(--color-card); transition: transform .06s ease, border-bottom-width .06s ease, background-color .15s ease; }

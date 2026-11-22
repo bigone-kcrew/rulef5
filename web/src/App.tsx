@@ -102,6 +102,10 @@ function Shell() {
   // 원문 검색: Ctrl+K(맥 ⌘K) 또는 머리글 단추 — 메뉴(F키)를 늘리지 않고 어디서나 연다
   useEffect(() => { const h = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setDlg('search') } }; window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h) }, [])
   const row = useRef<HTMLDivElement>(null)
+  // F키 줄이 화면보다 길면(모바일) 오른쪽 끝을 흐리게 해 옆으로 밀 수 있음을 보인다
+  const [more, setMore] = useState(false)
+  const checkMore = () => { const el = row.current; if (el) setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 4) }
+  useEffect(() => { checkMore(); window.addEventListener('resize', checkMore); return () => window.removeEventListener('resize', checkMore) }, [])
   void modelTick
   const go = (view: string, a: any = null) => { setArg(a); setTab(view); window.scrollTo({ top: 0, behavior: 'smooth' }) }
   useEffect(() => { const h = (e: Event) => { const d = (e as CustomEvent).detail; go(d.tab, d.arg) }; window.addEventListener('rulef5:go', h); return () => window.removeEventListener('rulef5:go', h) }, [])
@@ -116,27 +120,27 @@ function Shell() {
   const leds: [string, boolean][] = [['ALIO', !!d?.alio_rest], [store.lawOc() ? '법제처(내 키)' : '법제처', !!d?.law_go || !!store.lawOc()], ['MCP', !!d?.alio_mcp], ['모델', !!(status?.llm || m?.apiKey)]]
   return (
     <div className="min-h-svh bg-background">
-      <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
+      <header className="z-30 border-b bg-background/90 backdrop-blur sm:sticky sm:top-0">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 pt-2.5 sm:px-4">
           <button type="button" onClick={() => go('home')} className="flex min-w-0 items-baseline gap-2 text-left" aria-label="시작 화면으로">
             <span className="truncate text-lg font-bold tracking-tight">규정 새로고침</span>
             <span className="hidden text-xs text-muted-foreground sm:inline"><span className="font-mono">Rule F5</span> · 새로(제정) + 고침(개정)</span>
           </button>
           <div className="ml-auto flex items-center gap-3">
-            <button type="button" className="hidden max-w-64 truncate text-xs text-muted-foreground hover:text-foreground md:block" onClick={() => setDlg('profile')} title="기관 설정(F11)">{profile.name} · {TYPE_LABEL[profile.type]} · {modelLabel}</button>
+            <button type="button" className="hidden h-8 max-w-64 truncate rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground md:block" onClick={() => setDlg('profile')} title="기관 설정(F11)">{profile.name} · {TYPE_LABEL[profile.type]} · {modelLabel}</button>
             <div className="hidden items-center gap-2.5 sm:flex" aria-label="연결 상태">{leds.map(([k, on]) => <span key={k} className="flex items-center gap-1 text-[11px] text-muted-foreground" title={`${k} ${on ? '연결됨' : '미설정'}`}><span className="led" data-on={on} />{k}</span>)}</div>
             <button type="button" onClick={() => setDlg('search')} className="key flex h-9 items-center gap-1.5 px-2.5 text-sm" title="원문 검색(AI 없이) · Ctrl+K" aria-label="원문 검색"><SearchIcon className="size-4" /><span className="hidden sm:inline">검색</span><span className="hidden font-mono text-[10px] text-muted-foreground lg:inline">Ctrl K</span></button>
             <SoundToggle />
             <ThemeKey />
           </div>
         </div>
-        <div ref={row} className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-3 py-2.5 sm:px-4" role="navigation" aria-label="기능키 메뉴">
+        <div ref={row} onScroll={checkMore} className={`mx-auto flex max-w-6xl gap-1 overflow-x-auto px-3 py-2 sm:px-4 sm:py-2.5 ${more ? 'fade-end' : ''}`} role="navigation" aria-label="기능키 메뉴">
           {FKEYS.map((k, i) => {
             const on = !!k.view && k.view === tab, ok = enabled(k.view)
             return (
               <button key={k.f} type="button" disabled={!ok} title={`${k.f} ${k.label} — ${k.hint}`} data-on={on} aria-current={on ? 'page' : undefined}
                 onClick={() => (k.action ? setDlg(k.action) : go(k.view!))}
-                className={`key flex h-12 min-w-[4.6rem] shrink-0 flex-col items-start justify-between px-2 py-1 text-left disabled:opacity-40 lg:flex-1 ${i % 4 === 0 && i ? 'ml-2 sm:ml-3' : ''} ${k.f === 'F5' && !on ? 'border-primary text-primary' : ''}`}>
+                className={`key flex h-11 min-w-[4.3rem] shrink-0 sm:h-12 sm:min-w-[4.6rem] flex-col items-start justify-between px-2 py-1 text-left disabled:opacity-40 lg:flex-1 ${i % 4 === 0 && i ? 'ml-2 sm:ml-3' : ''} ${k.f === 'F5' && !on ? 'border-primary text-primary' : ''}`}>
                 <span className="font-mono text-[10px] leading-none opacity-70">{k.f}</span>
                 <span className="whitespace-nowrap text-[13px] font-semibold leading-none">{k.label}</span>
               </button>

@@ -24,7 +24,7 @@ export default function HomeView({ onOpenDialog }: { onOpenDialog: (d: 'help' | 
       </section>
 
       <section className="flex flex-col gap-2.5">
-        <h2 className="flex items-center gap-2.5 font-semibold"><Keycap className="h-7 min-w-7 text-xs">1</Keycap>어느 기관에서 쓰시나요? {chosen && <button type="button" className="text-sm font-normal text-muted-foreground underline underline-offset-4" onClick={() => onOpenDialog('profile')}>기관명·세부 설정</button>}</h2>
+        <h2 className="flex items-center gap-2.5 font-semibold"><Keycap className="h-7 min-w-7 text-xs">1</Keycap>어느 기관에서 쓰시나요? {chosen && <button type="button" className="inline-flex h-8 items-center rounded-md px-1.5 text-sm font-normal text-muted-foreground underline underline-offset-4 hover:bg-muted hover:text-foreground" onClick={() => onOpenDialog('profile')}>기관명·세부 설정</button>}</h2>
         <div className="grid gap-2 sm:grid-cols-3">
           {TYPES.map(([type, sub, I]) => (
             <button key={type} type="button" data-on={chosen && profile.type === type} onClick={() => pick(type)} className="key flex items-center gap-3 p-3 text-left">

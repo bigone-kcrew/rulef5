@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { MoreTrigger } from '@/components/more-trigger'
 import { Spinner } from '@/components/ui/spinner'
 import { TargetPicker, type Picked } from '@/components/target-picker'
 import { StepTitle } from '@/components/keycap'
@@ -56,14 +57,14 @@ export function EnactForm({ busy, onRun }: { busy: boolean; onRun: (input: Recor
           </CollapsibleContent>
         </Collapsible>
         <Collapsible>
-          <CollapsibleTrigger render={<Button variant="link" size="sm" className="px-0 text-muted-foreground" />}>고급 옵션: 함께 정비할 기존 규정{related?.uploads.length ? ` · ${related.uploads.length}개` : ''}</CollapsibleTrigger>
+          <MoreTrigger>고급 옵션: 함께 정비할 기존 규정{related?.uploads.length ? ` · ${related.uploads.length}개` : ''}</MoreTrigger>
           <CollapsibleContent><div className="mt-2 rounded-md border bg-card p-3"><p className="mb-2 text-sm text-muted-foreground">새 규정 때문에 고쳐야 할 기존 규정을 고르면 부칙의 다른 규정 정비 대비표를 만듭니다.</p><TargetPicker onChange={setRelated} multi /></div></CollapsibleContent>
         </Collapsible>
       </section>
       <div className="flex flex-wrap items-center justify-end gap-3 border-t pt-4">
         <FastToggle fast={fast} setFast={setFast} />
         {(!title.trim() || !purpose.trim()) && <span className="text-sm text-muted-foreground">제명과 제정 목적을 적으세요</span>}
-        <Button size="lg" disabled={!title.trim() || !purpose.trim() || busy} onClick={() => onRun({ kind, title: title.trim(), purpose: purpose.trim(), delegations: dels.map(({ label, ...d }) => (d.text ? { text: d.text, label } : d)), related_doc_ids: related?.uploads || [], auto: fast || undefined })}>
+        <Button size="lg" className="w-full px-4 sm:w-auto" disabled={!title.trim() || !purpose.trim() || busy} onClick={() => onRun({ kind, title: title.trim(), purpose: purpose.trim(), delegations: dels.map(({ label, ...d }) => (d.text ? { text: d.text, label } : d)), related_doc_ids: related?.uploads || [], auto: fast || undefined })}>
           {busy ? <Spinner data-icon="inline-start" /> : <CornerDownLeftIcon data-icon="inline-start" />}초안 만들기
         </Button>
       </div>

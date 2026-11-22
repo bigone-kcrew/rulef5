@@ -88,7 +88,7 @@ export default function SimilarView() {
           <Field>
             <FieldLabel htmlFor="sim-topic">무엇을 비교하나요</FieldLabel>
             <Input id="sim-topic" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="예: 배우자 출산휴가" maxLength={100} onKeyDown={(e) => { if (e.key === 'Enter' && ready) job.start('similar', { topic: topic.trim(), mine: mine?.name || mineText.trim() || undefined, org_type: profile.type, scope, insts: picked, n: 10, auto: true }) }} />
-            <div className="flex flex-wrap gap-1.5">{(TOPICS[profile.type] || TOPICS['public-institution']).map((x) => <Button key={x} variant="outline" size="xs" onClick={() => setTopic(x)}>{x}</Button>)}</div>
+            <div className="flex flex-wrap gap-1.5">{(TOPICS[profile.type] || TOPICS['public-institution']).map((x) => <Button key={x} variant="outline" size="sm" className="rounded-full" onClick={() => setTopic(x)}>{x}</Button>)}</div>
             <FieldDescription>같은 주제를 정한 조문을 기관마다 하나씩 찾아 값(일수·기한 등)을 나란히 놓습니다.</FieldDescription>
           </Field>
         </FieldGroup>

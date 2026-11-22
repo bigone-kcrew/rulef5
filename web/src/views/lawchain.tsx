@@ -43,7 +43,7 @@ export default function LawChainView() {
             <Input className="min-w-48 flex-1" value={name} onChange={(e) => setName(e.target.value)} placeholder="법률 이름(예: 근로기준법, 남녀고용평등법)" maxLength={80} />
             <Button type="submit" disabled={busy || !name.trim()}>{busy ? <Spinner data-icon="inline-start" /> : <SearchIcon data-icon="inline-start" />}찾기</Button>
           </form>
-          <div className="flex flex-wrap gap-1.5">{['근로기준법', '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률', '공공기관의 운영에 관한 법률'].map((x) => <Button key={x} variant="outline" size="xs" onClick={() => { setName(x); find(x) }}>{x}</Button>)}</div>
+          <div className="flex flex-wrap gap-1.5">{['근로기준법', '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률', '공공기관의 운영에 관한 법률'].map((x) => <Button key={x} variant="outline" size="sm" className="rounded-full" onClick={() => { setName(x); find(x) }}>{x}</Button>)}</div>
           {msg && <p className="text-sm text-muted-foreground">{msg}</p>}
         </div>
         {fam && (

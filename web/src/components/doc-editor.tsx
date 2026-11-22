@@ -34,7 +34,7 @@ export function DocActions({ ds, name }: { ds: DocSet; name: string }) {
       <Button variant="outline" size="sm" onClick={() => download(fname('html'), toHtml(ds), 'text/html')}><DownloadIcon data-icon="inline-start" />문서(HTML·인쇄용)</Button>
       <Button variant="outline" size="sm" onClick={() => download(fname('md'), toMd(ds), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
       {rows.length > 0 && <Button variant="outline" size="sm" onClick={() => download(fname('csv'), toCsv(rows), 'text/csv')}><SheetIcon data-icon="inline-start" />대비표 CSV</Button>}
-      <Button variant="ghost" size="sm" onClick={() => { const w = window.open('', '_blank'); if (!w) return; w.document.write(toHtml(ds)); w.document.close(); w.focus(); w.print() }}><PrinterIcon data-icon="inline-start" />인쇄</Button>
+      <Button variant="outline" size="sm" onClick={() => { const w = window.open('', '_blank'); if (!w) return; w.document.write(toHtml(ds)); w.document.close(); w.focus(); w.print() }}><PrinterIcon data-icon="inline-start" />인쇄</Button>
     </div>
   )
 }
