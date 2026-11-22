@@ -87,7 +87,7 @@ export default function ImpactView() {
                   <span className={on ? 'opacity-80' : 'text-muted-foreground'}>{x.state === 'scheduled' ? `${md(x.eff)} 시행` : `${md(x.eff)} 시행됨`} · {x.why}{/타법/.test(x.change) ? ' · 타법개정' : ''}</span>
                 </button>) })}</div>
             ) : !sbusy && <p className="text-xs text-muted-foreground">{sugg?.note || '제안을 불러오지 못했습니다. 법령명을 직접 넣어 주세요.'}</p>}
-            {sugg?.items?.length ? <p className="text-xs text-muted-foreground">{sugg.note}{(sugg as any).as_of ? ` · 법제처 자료 기준 ${at((sugg as any).as_of)}(1시간마다 새로 확인)` : ''}. 기관 유형(F11)에 맞춰 복무·인사·보수·계약·정보공개 등에 영향을 주는 법령을 골랐습니다(전수 아님).</p> : null}
+            {sugg?.items?.length ? <p className="text-xs text-muted-foreground">{sugg.note}{(sugg as any).as_of ? ` · 법제처 자료 기준 ${at((sugg as any).as_of)}(12시간마다 새로 확인)` : ''}. 기관 유형(F11)에 맞춰 복무·인사·보수·계약·정보공개 등에 영향을 주는 법령을 골랐습니다(전수 아님).</p> : null}
           </div>
           <div className="flex flex-wrap gap-2"><Input className="min-w-64 flex-1" value={rlaws} onChange={(e) => { setEdited(true); setRlaws(e.target.value) }} placeholder="법령명(쉼표로 구분, 최대 3개)" /><Button disabled={radar.busy} onClick={() => radar.start('radar', { org_type: profile.type, inst: inst || undefined, laws: rlaws.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 3) })}>{radar.busy ? <Spinner data-icon="inline-start" /> : <HistoryIcon data-icon="inline-start" />}레이더 실행</Button></div>
           <JobTimeline job={radar.job} error={radar.error} startedAt={radar.startedAt} onAnswer={radar.answer} onRetry={radar.canRetry ? radar.retry : undefined} title="시행예정 레이더" />

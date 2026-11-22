@@ -41,9 +41,9 @@ export function govJsonToDoc(d, target, id) {
 const effRow = (x) => ({ name: x['법령명한글'] || '', mst: String(x['법령일련번호'] || ''), law_id: x['법령ID'] || '', eff: String(x['시행일자'] || ''), anc: String(x['공포일자'] || ''), kind: x['법령구분명'] || '', change: x['제개정구분명'] || '', dept: x['소관부처명'] || '', state: x['현행연혁코드'] || '' });
 export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
 export function createLawGo({ oc = null, fetchImpl = fetch, cache = null } = {}) {
-  // 저장 시간: 목록(검색·시행일 목록·연혁)은 1시간 — 새 개정이 빨리 보이게, 판본 원문(MST·일련번호로 고정)은 7일
-  const HOUR = 3600e3, WEEK = 7 * 24 * HOUR;
-  async function getAt(path, params, ttl = path === 'lawService.do' ? WEEK : HOUR) {
+  // 저장 시간: 목록(검색·시행일 목록·연혁)은 12시간 — 그날 등록된 개정이 반나절 안에 보이게, 판본 원문(MST·일련번호로 고정)은 7일
+  const LIST = 12 * 3600e3, WEEK = 7 * 24 * 3600e3;
+  async function getAt(path, params, ttl = path === 'lawService.do' ? WEEK : LIST) {
     const url = `${BASE}/${path}?${new URLSearchParams({ OC: oc, type: 'JSON', ...params })}`;
     // 캐시 키에는 인증키(OC)를 넣지 않는다 — 공개 자료이므로 서버 키·사용자 키가 캐시를 함께 쓰고, 키가 메모리·디스크에 남지 않는다
     const key = `${BASE}/${path}?${new URLSearchParams({ type: 'JSON', ...params })}`;

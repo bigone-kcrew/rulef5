@@ -110,10 +110,10 @@ export function createRoutes({ sources: baseSources, jobs, workspace, env, flows
       if (q.corpus === 'bylaws' && !q.all_versions) { const { dedupeEditions } = await import('../flows/common.mjs'); r.rows = dedupeEditions(r.rows, { byArticle: true }); }
       sendJson(res, 200, r);
     }],
-    // 시행예정 레이더에 넣을 법령 제안(법제처 시행일 기준 법령, 기관 유형별). 공개 자료라 기관 유형별로 1시간 같이 쓴다(법제처 목록 저장도 1시간)
+    // 시행예정 레이더에 넣을 법령 제안(법제처 시행일 기준 법령, 기관 유형별). 공개 자료라 기관 유형별로 같이 쓰고, 법제처 목록을 받은 때(as_of)부터 12시간 — 저장이 겹쳐 더 오래되지 않게
     ['POST', '/api/radar/suggest', async (req, res) => {
       const b = await readJson(req), t = ['public-institution', 'central-ministry', 'local-gov'].includes(b.org_type) ? b.org_type : 'public-institution';
-      const hit = suggestCache.get(t); if (hit && Date.now() - hit.t < 3600e3) return sendJson(res, 200, hit.v);
+      const hit = suggestCache.get(t); if (hit && Date.now() - (hit.v.as_of || hit.t) < 12 * 3600e3) return sendJson(res, 200, hit.v);
       const v = await suggestLaws(srcFor(req), { org_type: t });
       if (!v.disabled && v.items.length) suggestCache.set(t, { t: Date.now(), v });
       sendJson(res, 200, v);
