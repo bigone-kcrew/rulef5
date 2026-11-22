@@ -78,3 +78,16 @@ test('lawNames extracts statute names and abbreviations from intent', async () =
   assert.deepEqual(lawNames('「근로기준법 시행령」 제5조와 지방자치법에 따라'), ['근로기준법 시행령', '지방자치법']);
   assert.deepEqual(lawNames('출산휴가를 늘린다'), []);
 });
+
+test('a draft identical to the current text is reported as nothing to change', async () => {
+  const a7 = SAMPLE.articles.find((a) => a.ref === '제7조');
+  const same = { ...GOOD, changes: [{ op: 'amend', ref: '제7조', title: a7.title, new_text: a7.body, reason: '이미 반영', basis_ids: ['E2'] }] };
+  const jobs = createJobs();
+  const id = jobs.start('amend', { ...input, refs: ['제7조'] }, runAmend, { deps: { sources: mockSources(), llm: llmOf(same) } });
+  const j = await until(jobs, id);
+  assert.equal(j.status, 'done', JSON.stringify(j.error));
+  assert.deepEqual(j.result.no_change, { refs: ['제7조'] });
+  assert.match(j.result.docset.sections.find((s) => s.id === 'checklist').body, /수정안이 현행과 같습니다\(제7조\)/);
+  const good = createJobs(); const gid = good.start('amend', { ...input, refs: ['제7조'] }, runAmend, { deps: { sources: mockSources(), llm: llmOf(GOOD) } });
+  assert.equal((await until(good, gid)).result.no_change, null);
+});

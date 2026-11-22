@@ -127,8 +127,9 @@ function Shell() {
             <span className="hidden text-xs text-muted-foreground sm:inline"><span className="font-mono">Rule F5</span> · 새로(제정) + 고침(개정)</span>
           </button>
           <div className="ml-auto flex items-center gap-3">
-            <button type="button" className="hidden h-8 max-w-64 truncate rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground md:block" onClick={() => setDlg('profile')} title="기관 설정(F11)">{profile.name} · {TYPE_LABEL[profile.type]} · {modelLabel}</button>
-            <div className="hidden items-center gap-2.5 sm:flex" aria-label="연결 상태">{leds.map(([k, on]) => <span key={k} className="flex items-center gap-1 text-[11px] text-muted-foreground" title={`${k} ${on ? '연결됨' : '미설정'}`}><span className="led" data-on={on} />{k}</span>)}</div>
+            <button type="button" className="hidden h-8 max-w-64 truncate rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground md:block" onClick={() => setDlg('profile')} title="기관 설정(F11)">{profile.name} · {TYPE_LABEL[profile.type]}</button>
+            {/* 연결 상태: 전문 용어(ALIO·MCP·모델명) 대신 한 줄로, 자세한 내용은 마우스를 올리면 보인다 · 누르면 모델 설정(F12) */}
+            <button type="button" onClick={() => setDlg('model')} aria-label="연결 상태와 AI 모델" title={[...leds.map(([k, on]) => `${k}: ${on ? '연결됨' : '미설정'}`), `AI 모델: ${modelLabel}`].join('\n')} className="hidden h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:flex"><span className="led" data-on={leds.every(([, on]) => on)} />{leds.every(([, on]) => on) ? '연결 정상' : `일부 미연결(${leds.filter(([, on]) => !on).map(([k]) => k).join('·')})`}</button>
             <button type="button" onClick={() => setDlg('search')} className="key flex h-9 items-center gap-1.5 px-2.5 text-sm" title="원문 검색(AI 없이) · Ctrl+K" aria-label="원문 검색"><SearchIcon className="size-4" /><span className="hidden sm:inline">검색</span><span className="hidden font-mono text-[10px] text-muted-foreground lg:inline">Ctrl K</span></button>
             <SoundToggle />
             <ThemeKey />
@@ -140,8 +141,8 @@ function Shell() {
             return (
               <button key={k.f} type="button" disabled={!ok} title={`${k.f} ${k.label} — ${k.hint}`} data-on={on} aria-current={on ? 'page' : undefined}
                 onClick={() => (k.action ? setDlg(k.action) : go(k.view!))}
-                className={`key flex h-11 min-w-[4.3rem] shrink-0 sm:h-12 sm:min-w-[4.6rem] flex-col items-start justify-between px-2 py-1 text-left disabled:opacity-40 lg:flex-1 ${i % 4 === 0 && i ? 'ml-2 sm:ml-3' : ''} ${k.f === 'F5' && !on ? 'border-primary text-primary' : ''}`}>
-                <span className="font-mono text-[10px] leading-none opacity-70">{k.f}</span>
+                className={`key flex h-11 min-w-[4.3rem] shrink-0 sm:h-12 sm:min-w-[4.6rem] flex-col items-start justify-between px-2 py-1 text-left disabled:opacity-40 lg:flex-1 ${i % 4 === 0 && i ? 'ml-2 sm:ml-3' : ''}`}>
+                <span className="font-mono text-xs leading-none opacity-70">{k.f}</span>
                 <span className="whitespace-nowrap text-[13px] font-semibold leading-none">{k.label}</span>
               </button>
             )

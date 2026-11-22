@@ -299,6 +299,10 @@ export async function runAmend(ctx) {
     const shortWarn = changes.filter((c) => c.op === 'amend' && c.old.length >= 400 && c.new.length < c.old.length * 0.6).map((c) => `${c.ref}: 수정안이 원문보다 크게 짧습니다. 항·호 누락 여부를 대조하세요.`);
     const paraLoss = changes.filter((c) => c.op === 'amend' && splitParagraphs(c.new).length < splitParagraphs(c.old).length).map((c) => `${c.ref}: 항 수가 줄었습니다(${splitParagraphs(c.old).length}→${splitParagraphs(c.new).length}). 의도한 삭제인지 확인하세요.`);
     const adverse = adverseChanges(changes);
+    // 수정안이 현행과 글자까지 같으면(요청이 이미 반영된 경우 등) 「바꿀 곳 없음」으로 알린다 — 빈 초안을 완료처럼 보이지 않게
+    const flatW = (t) => String(t || '').replace(/\s+/g, '');
+    const same = changes.filter((c) => c.op === 'amend' && flatW(c.new) === flatW(c.old));
+    const noChange = changes.length && same.length === changes.length ? { refs: same.map((c) => c.ref) } : null;
     // C3 단체협약 정합성(같은 기관 협약, 바뀐 조문 제목을 주제로)
     let ca = null;
     // 단체협약은 공공기관(ALIO)만 — 부처·지자체 규정(법제처)과 업로드 자료는 대상 아님
@@ -329,6 +333,8 @@ export async function runAmend(ctx) {
     const titled = main.filter((a) => topicWords.some((w) => String(a.title || '').includes(w)));
     const offTopic = absentTopic ? [] : changes.filter((c) => c.op === 'amend' && titled.length && !titled.some((a) => a.ref === c.ref) && !topicWords.some((w) => String(c.title || '').includes(w))).map((c) => `${c.ref}(${c.title}): 요청 주제와 제목이 맞는 조문(${titled.slice(0, 3).map((a) => `${a.ref} ${a.title}`).join(', ')})이 따로 있습니다. 고칠 조문이 맞는지 확인하세요.`);
     const checks = [
+      noChange ? `수정안이 현행과 같습니다(${noChange.refs.join(', ')}). 요청한 내용이 이미 규정에 들어 있는지 원문을 확인하고, 다른 내용을 바꾸려면 개정 의도를 고쳐 다시 만드세요.` : null,
+      ...(noChange ? [] : same.map((c) => `${c.ref}: 수정안이 현행과 같습니다. 고칠 내용이 빠졌는지 확인하세요.`)),
       gateSkipped,
       orgMismatch,
       ...offTopic,
@@ -375,7 +381,7 @@ export async function runAmend(ctx) {
     ];
     const ev = [{ label: `대상 규정 ${doc.inst || ''} ${title}`.trim(), doc_id: doc.doc_id, edition: editionLabel(doc) }, ...evidence.map((e) => ({ label: `[${e.id}] ${e.kind} ${e.label}`, doc_id: e.doc_id, ref: e.ref, edition: e.edition }))];
     s.note(`문서 ${sections.length}종 · 대비표 ${sections[1].rows.length}행`);
-    try { ctx.metric?.('amend', { ops: changes.map((c) => c.op).join(','), absent_topic: !!absentTopic, sibling: !!sibling, evidence: evidence?.length ?? null, evidence_errors: errors?.length ?? null, review_applied: review?.applied?.length ?? null, review_rejected: review?.rejected?.length ?? null, review_remaining: review?.remaining?.length ?? null, dropped: draft.dropped?.length ?? 0, not_reflected: draft.not_reflected?.length ?? 0, checklist: checks.filter(Boolean).length, org_mismatch: !!orgMismatch }); } catch { /* 지표는 작업을 막지 않는다 */ }
-    return { sibling, kind: '개정', moves: moveRanges(fix.map), docset: { kind: '일부개정', title, sections, evidence: ev }, changes: allChanges, corrections: fix.corr, citing: fix.citing, model: llm.config, doc: { doc_id: doc.doc_id, title, inst: doc.inst }, docKeys: [...sections.map((x) => x.id), 'evidence'] };
+    try { ctx.metric?.('amend', { ops: changes.map((c) => c.op).join(','), absent_topic: !!absentTopic, sibling: !!sibling, evidence: evidence?.length ?? null, evidence_errors: errors?.length ?? null, review_applied: review?.applied?.length ?? null, review_rejected: review?.rejected?.length ?? null, review_remaining: review?.remaining?.length ?? null, dropped: draft.dropped?.length ?? 0, not_reflected: draft.not_reflected?.length ?? 0, checklist: checks.filter(Boolean).length, org_mismatch: !!orgMismatch, no_change: !!noChange }); } catch { /* 지표는 작업을 막지 않는다 */ }
+    return { sibling, no_change: noChange, kind: '개정', moves: moveRanges(fix.map), docset: { kind: '일부개정', title, sections, evidence: ev }, changes: allChanges, corrections: fix.corr, citing: fix.citing, model: llm.config, doc: { doc_id: doc.doc_id, title, inst: doc.inst }, docKeys: [...sections.map((x) => x.id), 'evidence'] };
   });
 }

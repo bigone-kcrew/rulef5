@@ -68,7 +68,8 @@ export function noticeDoc({ profile, title, kind, reasonSummary, points, regKind
   ].join('\n');
 }
 export function checklistDoc(items) {
-  return items.filter(Boolean).map((x) => `☐ ${x}`).join('\n');
+  // 같은 문구가 여러 번 나오면(모델이 같은 변경을 여러 번 낸 경우 등) 한 번만 적는다
+  return [...new Set(items.filter(Boolean))].map((x) => `☐ ${x}`).join('\n');
 }
 
 // 절차 단계별 서식: 기관 유형에 맞춰 협조 공문·의견 청취서·검토 의뢰서·심의 안건·부의안·의회 제출안·공포(발령)문을 만든다

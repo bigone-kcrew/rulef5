@@ -1,9 +1,10 @@
 // 절차 따라가기(마법사): 준비 → 초안 만들기 → 초안 검토 → 기관 유형별 절차 단계(협의·검토·심의·공포)
 // 각 단계에는 그 단계의 할 일과 필요한 문서만 보여 준다. 진행 상태와 고친 문서는 탭(sessionStorage)에 보관한다.
+import { toast } from 'sonner'
 import { DocLink } from '@/components/doc-viewer'
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChevronDownIcon, ListChecksIcon, MessageSquareQuoteIcon, RotateCcwIcon, PaperclipIcon, PartyPopperIcon } from 'lucide-react'
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChevronDownIcon, ListChecksIcon, MessageSquareQuoteIcon, RotateCcwIcon, PaperclipIcon, PartyPopperIcon, TriangleAlertIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -63,6 +64,9 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
     ...(proc?.steps || []).filter((s) => s.id !== 'draft').map((s) => ({ id: `p:${s.id}`, title: s.title, hint: `근거: ${s.basis}`, optional: !!s.optional, proc: s })),
   ], [mode, proc])
   useEffect(() => { sessionStorage.setItem(key(mode), JSON.stringify(flow)) }, [flow, mode])
+  // 초안이 있으면 탭을 닫거나 다른 주소로 갈 때 한 번 묻는다(초안은 이 탭에만 보관되어 닫으면 사라진다)
+  const hasDraft = !!flow.result
+  useEffect(() => { if (!hasDraft) return; const h = (e: BeforeUnloadEvent) => { e.preventDefault() }; window.addEventListener('beforeunload', h); return () => window.removeEventListener('beforeunload', h) }, [hasDraft])
   // 초안 작업이 끝나면 결과를 받아 검토 단계로 넘어간다
   useEffect(() => {
     const j = job.job
@@ -111,7 +115,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
     const rows = sec('comparison')?.rows || [], cur = sec('full_text'); if (!cur || !flow.result?.doc?.doc_id) return
     const changes = changesFromRows(flow.result.changes || [], rows)
     setRebuilding(true)
-    try { const r = await api<{ body: string }>('/api/fulltext', { method: 'POST', body: { doc_id: flow.result.doc.doc_id, changes, addenda: sec('addenda')?.body || '' } }); update({ ...cur, body: r.body }) } catch (e) { window.alert(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
+    try { const r = await api<{ body: string }>('/api/fulltext', { method: 'POST', body: { doc_id: flow.result.doc.doc_id, changes, addenda: sec('addenda')?.body || '' } }); update({ ...cur, body: r.body }) } catch (e) { toast.error(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
   }
   const ds = (ids: string[]): DocSet => ({ kind: flow.result?.docset.kind || '', title: flow.result?.docset.title || '', evidence: flow.result?.docset.evidence || [], sections: ids.map(sec).filter(Boolean) as Section[] })
   const title = flow.result?.docset.title
@@ -169,6 +173,7 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
           ) : cur.id === 'review' ? (
             <StepPanel key="review" title={`${idx + 1}. ${cur.title}`} hint={`「${title}」 ${flow.result?.docset.kind}안 — AI 초안입니다. 원문과 대조해 고치세요. 표와 본문은 눌러서 바로 고칠 수 있습니다.`}>
               <div className="flex flex-col gap-6">
+                {flow.result?.no_change && <Alert><TriangleAlertIcon /><AlertTitle>바꿀 곳이 없습니다</AlertTitle><AlertDescription><p>{flow.result.no_change.refs.join(', ')}의 수정안이 현행과 같습니다. 요청한 내용이 이미 규정에 들어 있을 수 있으니 원문을 확인하세요.</p><Button variant="outline" size="sm" className="mt-2" onClick={() => go('prepare')}><ArrowLeftIcon data-icon="inline-start" />개정 의도 고쳐 다시 만들기</Button></AlertDescription></Alert>}
                 <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4">
                   {([[mode === 'amend' ? '바뀌는 조문' : '조문', new Set((sec('comparison')?.rows || []).filter((r) => r.newHtml !== '(현행과 같음)').map((r) => r.ref)).size], ['대비표 행', sec('comparison')?.rows?.length || 0], ['근거 자료', flow.result?.docset.evidence?.length || 0], ['확인할 점', (sec('checklist')?.body || '').split('\n').filter((l) => l.startsWith('☐')).length]] as [string, number][]).map(([l, v]) => <div key={l} className="bg-card p-3"><dt className="text-xs text-muted-foreground">{l}</dt><dd className="font-mono text-2xl font-semibold tabular-nums">{v}</dd></div>)}
                 </dl>

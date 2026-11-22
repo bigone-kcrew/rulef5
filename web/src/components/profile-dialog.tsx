@@ -1,4 +1,5 @@
 // 기관 프로필(기관별 설정): 유형에 따라 절차·예고문·부칙 문구가 바뀐다
+import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldGroup, FieldLabel, FieldDescription } from '@/components/ui/field'
@@ -50,7 +51,7 @@ export function ProfileDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <DialogFooter className="sm:justify-between">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => download('기관프로필.json', JSON.stringify(p, null, 2), 'application/json')}>내보내기</Button>
-            <Button variant="outline" size="sm" render={<label />}>가져오기<input type="file" accept="application/json" hidden onChange={async (e) => { try { const x = JSON.parse(await e.target.files![0].text()); if (!x.name || !procedures[x.type]) throw 0; setP(x) } catch { alert('프로필 JSON 형식이 올바르지 않습니다.') } }} /></Button>
+            <Button variant="outline" size="sm" render={<label />}>가져오기<input type="file" accept="application/json" hidden onChange={async (e) => { try { const x = JSON.parse(await e.target.files![0].text()); if (!x.name || !procedures[x.type]) throw 0; setP(x) } catch { toast.error('프로필 JSON 형식이 올바르지 않습니다.') } }} /></Button>
           </div>
           <Button size="lg" className="px-5" onClick={() => { const name = p.name?.trim() || profiles.find((x) => x.type === p.type)?.name || '예시 기관'; setProfile({ ...p, name, id: 'custom' }); onOpenChange(false) }}>저장</Button>
         </DialogFooter>

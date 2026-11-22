@@ -1,4 +1,5 @@
 // 결과 문서 세트: 한눈에 보는 요약 보드 + 문서별 편집기 + 내보내기
+import { toast } from 'sonner'
 import { DocLink } from '@/components/doc-viewer'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useInView } from 'motion/react'
@@ -52,7 +53,7 @@ export function DocsetBoard({ result }: { result: any }) {
       const bodies: string[] = []
       for (const p of result.per_doc) { if (!p.changes?.length) continue; const r = await api<{ body: string }>('/api/fulltext', { method: 'POST', body: { doc_id: p.doc_id, changes: changesFromRows(p.changes, rows.filter((x) => x.doc_id === p.doc_id)) } }); bodies.push(r.body) }
       const el = editors.current['full_text']; if (el) el.innerText = bodies.join('\n\n════════\n\n')
-    } catch (e) { window.alert(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
+    } catch (e) { toast.error(`전문을 다시 만들지 못했습니다: ${(e as Error).message}`) } finally { setRebuilding(false) }
   }
   const sec = ds.sections.find((s) => s.id === active)
   return (
@@ -97,7 +98,7 @@ export function DocsetBoard({ result }: { result: any }) {
         </CardContent>
         {Array.isArray(result.changes) && result.changes.length > 0 && <CardContent><OpinionPanel result={result} /></CardContent>}
         <CardFooter className="flex flex-wrap gap-2">
-          {status?.features?.hwpx && <Button disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), current()) } catch (e) { window.alert((e as Error).message) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
+          {status?.features?.hwpx && <Button disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), current()) } catch (e) { toast.error(`한글(hwpx) 파일을 만들지 못했습니다: ${(e as Error).message}`) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
           {canRebuild && <Button variant="outline" disabled={rebuilding} onClick={rebuild}>{rebuilding ? <Spinner data-icon="inline-start" /> : <FileTextIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button>}
           <Button variant={status?.features?.hwpx ? 'outline' : 'default'} onClick={() => download(fname('md'), toMd(current()), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
           <Button variant="outline" onClick={() => download(fname('html'), toHtml(current()), 'text/html')}><DownloadIcon data-icon="inline-start" />문서(HTML·인쇄용)</Button>

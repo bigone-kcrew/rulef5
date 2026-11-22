@@ -1,4 +1,5 @@
 // 문서 한 건 편집기(본문 또는 신구조문대비표)와 내려받기. 고친 내용은 포커스를 벗어날 때 상위 상태에 저장한다.
+import { toast } from 'sonner'
 import { DownloadIcon, PrinterIcon, SheetIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -30,7 +31,7 @@ export function DocActions({ ds, name }: { ds: DocSet; name: string }) {
   const { status } = useApp(); const [hw, setHw] = useState(false)
   return (
     <div className="flex flex-wrap gap-2">
-      {status?.features?.hwpx && <Button variant="outline" size="sm" disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), ds) } catch (e) { window.alert((e as Error).message) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
+      {status?.features?.hwpx && <Button variant="outline" size="sm" disabled={hw} onClick={async () => { setHw(true); try { await downloadHwpx(fname('hwpx'), ds) } catch (e) { toast.error(`한글(hwpx) 파일을 만들지 못했습니다: ${(e as Error).message}`) } finally { setHw(false) } }}>{hw ? <Spinner data-icon="inline-start" /> : <DownloadIcon data-icon="inline-start" />}한글(hwpx)</Button>}
       <Button variant="outline" size="sm" onClick={() => download(fname('html'), toHtml(ds), 'text/html')}><DownloadIcon data-icon="inline-start" />문서(HTML·인쇄용)</Button>
       <Button variant="outline" size="sm" onClick={() => download(fname('md'), toMd(ds), 'text/markdown')}><DownloadIcon data-icon="inline-start" />Markdown</Button>
       {rows.length > 0 && <Button variant="outline" size="sm" onClick={() => download(fname('csv'), toCsv(rows), 'text/csv')}><SheetIcon data-icon="inline-start" />대비표 CSV</Button>}

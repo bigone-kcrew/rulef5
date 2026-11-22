@@ -11,7 +11,7 @@ import { api, EDITION, type Doc } from '@/lib/api'
 const HIST = /(<\s*(?:개정|신설|삭제|전문개정|본조신설|제목개정|종전)[^<>]{0,80}>|\[(?:개정|신설|본조신설|전문개정|제목개정|종전|본조\s*신설)[^\]]{0,80}\]|[(（]\s*(?:개정|신설|삭제)\s*[^()（）]{0,60}\d[^()（）]{0,40}[)）]|\^\([^)]*\))/g
 function Hist({ text }: { text: string }) {
   const parts = text.split(HIST)
-  return <>{parts.map((p, i) => (i % 2 ? <span key={i} className="ml-1 text-[11px] text-muted-foreground/80">{p}</span> : p))}</>
+  return <>{parts.map((p, i) => (i % 2 ? <span key={i} className="ml-1 text-xs text-muted-foreground">{p}</span> : p))}</>
 }
 const level = (l: string) => (/^[①-⑳]/.test(l) ? 0 : /^\d{1,2}\.\s/.test(l) ? 1 : /^[가-하]\.\s/.test(l) ? 2 : /^\d{1,2}\)\s/.test(l) ? 3 : -1)
 // 표 줄: 「|」로 시작하거나, 칸 구분 「|」이 셋 이상(원본에서 앞 「|」가 빠진 행)

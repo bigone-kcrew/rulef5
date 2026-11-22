@@ -1,4 +1,5 @@
 // 에이전트 진행 타임라인: 단계가 실시간으로 펼쳐지고, 사람 확인 지점에서 멈춘다
+import { toast } from 'sonner'
 import { DocLink } from '@/components/doc-viewer'
 import { Fragment, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -25,7 +26,7 @@ function GateCard({ gate, onAnswer, onBack }: { gate: Gate; onAnswer: (v: unknow
   const [sending, setSending] = useState(false)
   const toggle = (v: string, c: boolean) => setSel((cur) => (gate.multi ? (c ? [...cur, v] : cur.filter((x) => x !== v)) : c ? [v] : []))
   const opts = gate.options || []
-  const send = async () => { if (sending) return; setSending(true); try { await onAnswer(gate.multi ? sel : sel[0] ?? null) } catch (e) { alert((e as Error).message); setSending(false) } }
+  const send = async () => { if (sending) return; setSending(true); try { await onAnswer(gate.multi ? sel : sel[0] ?? null) } catch (e) { toast.error(`확인을 보내지 못했습니다: ${(e as Error).message}`); setSending(false) } }
   // 키보드: Enter = 지금 선택(추천)대로 확인, 1~9 = 그 번호 선택 켜고 끄기 — 입력 중이거나 다른 창이 열려 있으면 무시
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -45,7 +46,7 @@ function GateCard({ gate, onAnswer, onBack }: { gate: Gate; onAnswer: (v: unknow
         {opts.map((o, i) => (<Fragment key={o.value}>
           {o.group && o.group !== opts[i - 1]?.group && <div className="mt-1 text-xs font-semibold text-muted-foreground first:mt-0">{o.group}</div>}
           <motion.label initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className={`flex cursor-pointer items-start gap-3 rounded-md border p-2.5 transition-colors ${sel.includes(o.value) ? 'bg-muted/50' : 'text-muted-foreground hover:bg-muted/30'}`}>
-            {i < 9 && <kbd className="mt-0.5 hidden rounded border px-1 font-mono text-[10px] text-muted-foreground sm:inline">{i + 1}</kbd>}
+            {i < 9 && <kbd className="mt-0.5 hidden rounded border px-1 font-mono text-xs text-muted-foreground sm:inline">{i + 1}</kbd>}
             <Checkbox className="mt-0.5" checked={sel.includes(o.value)} onCheckedChange={(c) => toggle(o.value, !!c)} />
             <span className="min-w-0 text-sm"><span className="font-medium">{o.doc_id ? <DocLink docId={o.doc_id} refName={o.ref}>{o.label}</DocLink> : o.label}</span>{o.detail && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{o.detail}</span>}</span>
           </motion.label>

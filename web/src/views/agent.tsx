@@ -39,7 +39,7 @@ export default function AgentView() {
       <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 sm:p-5">
         <div className="flex flex-col gap-2 rounded-md border bg-background p-2 focus-within:ring-2 focus-within:ring-ring/40">
           <Textarea rows={3} className="border-0 bg-transparent shadow-none focus-visible:ring-0" maxLength={2000} value={msg} onChange={(e) => setMsg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send() }} placeholder="예: 우리 복무규정 배우자 출산휴가를 법 개정에 맞게 20일로 고쳐야 해" />
-          <div className="flex items-center gap-2"><span className="font-mono text-[11px] text-muted-foreground">Ctrl + Enter</span><span className="ml-auto"><FastToggle fast={fast} setFast={setFast} /></span><Button disabled={!msg.trim() || job.busy} onClick={send}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowUpIcon data-icon="inline-start" />}보내기</Button></div>
+          <div className="flex items-center gap-2"><span className="font-mono text-xs text-muted-foreground">Ctrl + Enter</span><span className="ml-auto"><FastToggle fast={fast} setFast={setFast} /></span><Button disabled={!msg.trim() || job.busy} onClick={send}>{job.busy ? <Spinner data-icon="inline-start" /> : <ArrowUpIcon data-icon="inline-start" />}보내기</Button></div>
         </div>
         <div className="flex flex-col items-start gap-1.5">
           <span className="text-xs text-muted-foreground">예시를 눌러 채우기</span>
