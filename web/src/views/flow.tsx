@@ -21,7 +21,7 @@ import { EnactForm } from '@/views/enact'
 import { useJob } from '@/hooks/use-job'
 import { useApp } from '@/lib/app-state'
 import { DOC_LABELS, api } from '@/lib/api'
-import { changesFromRows, type DocSet, type Section } from '@/lib/export'
+import { changeList, changesFromRows, type DocSet, type Section } from '@/lib/export'
 
 type Mode = 'amend' | 'enact'
 type Flow = { step: string; done: string[]; result: any | null; sections: Section[] | null; jobId?: string; opinionJob?: string }
@@ -188,9 +188,17 @@ export default function FlowView({ mode, preset }: { mode: Mode; preset?: AmendP
                 <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border text-sm sm:grid-cols-4">
                   {([[mode === 'amend' ? '바뀌는 조문' : '조문', new Set((sec('comparison')?.rows || []).filter((r) => r.newHtml !== '(현행과 같음)').map((r) => r.ref)).size], ['대비표 행', sec('comparison')?.rows?.length || 0], ['근거 자료', (flow.result?.docset.evidence || []).filter((e: any) => !/^대상 규정/.test(e.label)).length], ['확인할 점', (sec('checklist')?.body || '').split('\n').filter((l) => l.startsWith('☐')).length]] as [string, number][]).map(([l, v], i) => <button type="button" key={l} title="눌러서 보기" onClick={() => { if (i < 2) { setRevTab('comparison'); jump('rv-docs') } else if (i === 2) { setEvOpen(true); jump('rv-ev') } else jump('rv-checks') }} className="group bg-card p-3 text-left transition-colors hover:bg-muted/60"><span className="flex items-center justify-between text-xs text-muted-foreground">{l}<ArrowRightIcon className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></span><span className="block font-mono text-2xl font-semibold tabular-nums">{v}</span></button>)}
                 </div>
+                {(() => { const cs = changeList(sec('comparison')?.rows || []); return cs.length > 0 && (
+                  <section className="rounded-lg border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-500/40 dark:bg-amber-500/10">
+                    <h3 className="mb-1.5 text-sm font-semibold">바뀐 곳 한눈에 <span className="font-normal text-muted-foreground">{cs.length}곳 · 누르면 신구조문대비표로</span></h3>
+                    <ul className="flex flex-col gap-1 text-sm">{cs.slice(0, 10).map((c) => (
+                      <li key={c.ref}><button type="button" className="text-left hover:underline" onClick={() => { setRevTab('comparison'); jump('rv-docs') }}>
+                        <b className="mr-1.5">{c.ref}</b>{c.kind === '신설' ? <><span className="mr-1 rounded bg-amber-500 px-1 text-xs font-bold text-white">신설</span><mark className="mk-new">{c.neu.join(' ').slice(0, 90)}{c.neu.join(' ').length > 90 ? '…' : ''}</mark></> : c.kind === '삭제' ? <span className="rounded bg-red-500 px-1 text-xs font-bold text-white">삭제</span> : <>{c.old.length ? <mark className="mk-old">{c.old.join(' … ').slice(0, 70)}{c.old.join(' … ').length > 70 ? '…' : ''}</mark> : <span className="text-muted-foreground">(추가)</span>}<span className="mx-1.5 text-muted-foreground">→</span>{c.neu.length ? <mark className="mk-new">{c.neu.join(' … ').slice(0, 70)}{c.neu.join(' … ').length > 70 ? '…' : ''}</mark> : <span className="text-muted-foreground">(삭제)</span>}</>}
+                      </button></li>))}{cs.length > 10 && <li className="text-xs text-muted-foreground">외 {cs.length - 10}곳</li>}</ul>
+                  </section>) })()}
                 <Tabs id="rv-docs" className="scroll-mt-4 sm:scroll-mt-32" value={revTab ?? CORE.find((id) => sec(id))} onValueChange={(v) => setRevTab(String(v))}>
                   <TabsList>{CORE.filter((id) => sec(id)).map((id) => <TabsTrigger key={id} value={id}>{sec(id)!.title}</TabsTrigger>)}</TabsList>
-                  {CORE.filter((id) => sec(id)).map((id) => <TabsContent key={id} value={id} className="rounded-md border bg-background p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} /></TabsContent>)}
+                  {CORE.filter((id) => sec(id)).map((id) => <TabsContent key={id} value={id} className="rounded-md border bg-background p-3 sm:p-4"><DocEditor section={sec(id)!} onChange={update} marks={id === 'full_text' ? changeList(sec('comparison')?.rows || []).flatMap((c) => c.neu) : undefined} /></TabsContent>)}
                 </Tabs>
                 {sec('full_text') && flow.result?.doc?.doc_id && <div className="-mt-3 flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground"><span>신구조문대비표·부칙을 고쳤다면(개정문만 고쳤다면 대비표에도 같게 고친 뒤)</span><Button variant="outline" size="sm" disabled={rebuilding} onClick={rebuildFull}>{rebuilding ? <Spinner data-icon="inline-start" /> : <RotateCcwIcon data-icon="inline-start" />}개정 후 전문 다시 만들기</Button></div>}
                 <section id="rv-checks" className="flex scroll-mt-4 sm:scroll-mt-32 flex-col gap-2">

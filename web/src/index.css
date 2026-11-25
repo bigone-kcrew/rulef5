@@ -133,7 +133,10 @@
     }
 }
 /* 대비표 변경 구간: 굵은 밑줄 + 옅은 회색 바탕이 왼쪽에서 채워진다 */
-.cmp u { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; background-image: linear-gradient(var(--color-muted), var(--color-muted)); background-repeat: no-repeat; background-size: 100% 100%; animation: mark-in .8s ease-out both; }
+/* 신구조문대비표: 밑줄(법제 관행) + 색 — 현행 쪽 바뀌는 부분은 빨강, 개정안 쪽 새로 들어간 부분은 노랑·굵게 */
+.cmp u { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; border-radius: 3px; padding: 0 1px; animation: mark-in .8s ease-out both; }
+.cmp td:nth-child(1) u { background: color-mix(in oklch, #ef4444 18%, transparent); text-decoration-color: #dc2626; }
+.cmp td:nth-child(2) u { background: color-mix(in oklch, #facc15 42%, transparent); text-decoration-color: #ca8a04; font-weight: 600; }
 @keyframes mark-in { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
 @media (prefers-reduced-motion: reduce) { .cmp u { animation: none; } }
 /* 세로 스크롤바 자리를 늘 비워 둔다 — 긴 화면(F5 시작)과 짧은 화면 사이를 오갈 때 가운데 정렬 내용이 좌우로 밀리지 않게 */
@@ -154,3 +157,6 @@ body { line-height: 1.6; -webkit-font-smoothing: antialiased; font-feature-setti
 .led[data-on="true"] { background: oklch(0.72 0.19 150); box-shadow: 0 0 6px oklch(0.72 0.19 150 / .8); }
 .doc-body { white-space: pre-wrap; line-height: 1.9; outline: none; min-height: 8rem; }
 @media (prefers-reduced-motion: reduce) { .key { transition: none; } }
+/* 바뀐 값 강조: 옛 값(빨강 바탕·취소선 없이), 새 값(노랑 바탕·굵게) — 화면과 인쇄 모두 */
+mark.mk-old { background: color-mix(in oklch, #ef4444 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+mark.mk-new { background: color-mix(in oklch, #facc15 45%, transparent); color: inherit; font-weight: 600; border-radius: 3px; padding: 0 2px; }

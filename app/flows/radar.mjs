@@ -9,6 +9,8 @@ import { kstToday } from '../lib/law-go.mjs';
 const DEFAULT_LAWS = ['근로기준법', '남녀고용평등과 일ㆍ가정 양립 지원에 관한 법률', '공공기관의 운영에 관한 법률'];
 const DEFAULT_BY_TYPE = { 'local-gov': ['지방공무원법', '지방공무원 복무규정', '지방자치법'], 'central-ministry': ['국가공무원법', '국가공무원 복무규정', '행정절차법'] };
 const GENERIC = /^(정의|목적|벌칙|과태료|양벌규정|시행일|적용\s*범위|권한의\s*위임.*|위임|업무의\s*위탁.*|규제의\s*재검토|벌칙\s*적용에서.*)$/;
+// 본문에서 그 말(바뀌기 전 값 등)이 있는 곳 앞뒤만 잘라 보여 준다(조문 앞부분만 보이면 고칠 곳이 안 보인다)
+const around = (t, w, n = 100) => { const s = String(t || '').replace(/\s+/g, ' '); const i = w ? s.indexOf(w) : -1; if (i < 0) return clip(s, n * 2); const a = Math.max(0, i - n), b = Math.min(s.length, i + String(w).length + n); return `${a ? '…' : ''}${s.slice(a, b)}${b < s.length ? '…' : ''}`; };
 const norm = (s) => String(s || '').replace(/[ㆍ·\s_]/g, '');
 const core = (s) => String(s || '').replace(/<[^>]*>|\[[^\]]*\]/g, '').replace(/\s+/g, '');
 const ymd = (s) => `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
@@ -68,7 +70,7 @@ export async function runRadar(ctx) {
                 if (!x.art_ref || x.section === '부칙' || GENERIC.test(x.art_title || '') || /적용례|경과조치|시행일/.test(x.art_title || '')) continue;
                 const jd = ch.length ? judge(x.body, ch, a.title, x.art_title || '') : { status: 'check', reason: '법령 문구가 바뀐 조문과 같은 주제를 정한 조문입니다. 바뀐 내용이 우리 규정에도 필요한지 확인하세요.' };
                 if (jd.status === 'reflected' || /직접 정한 문장이 없습니다/.test(jd.reason)) continue;
-                affected.push({ inst: x.inst_name, doc_id: x.doc_id, doc_title: x.doc_title, ref: x.art_ref, title: x.art_title, status: jd.status, reason: jd.reason, excerpt: clip(x.body, 200), edition: editionLabel(x), law_line: lawLine,
+                affected.push({ inst: x.inst_name, doc_id: x.doc_id, doc_title: x.doc_title, ref: x.art_ref, title: x.art_title, status: jd.status, reason: jd.reason, excerpt: around(x.body, ch.map((c) => c.from).find((v) => String(x.body).includes(v)) || a.title, 110), edition: editionLabel(x), law_line: lawLine,
                   amend: { doc_id: x.doc_id, refs: [x.art_ref], intent: `${lawLine}에 맞춰 ${x.art_ref}(${x.art_title || ''})를 고친다.`.slice(0, 600) } });
               }
             } catch { errors.push(`${law} ${a.ref} 영향 검색`); }

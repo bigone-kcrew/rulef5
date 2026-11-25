@@ -142,7 +142,7 @@ function ImpactView({ onReset }: { onReset: () => void }) {
           <JobTimeline job={radar.job} error={radar.error} startedAt={radar.startedAt} onAnswer={radar.answer} onRetry={radar.canRetry ? radar.retry : undefined} title="시행예정 레이더" />
           {rr && (() => {
             // 고칠 곳을 규정별로 모은다(개정 후보가 있는 규정 먼저) — 규정 하나에서 여러 조문을 한 번에 개정 준비
-            const hits = rr.items.flatMap((it: any) => it.affected.map((a: any) => ({ ...a, eff: it.effective_from })))
+            const hits = rr.items.flatMap((it: any) => it.affected.map((a: any) => ({ ...a, eff: it.effective_from, item: it })))
             const docs = [...hits.reduce((m: Map<string, any>, a: any) => { const g = m.get(a.doc_id) || { doc_id: a.doc_id, inst: a.inst, title: a.doc_title, rows: [] as any[] }; if (!g.rows.some((x: any) => x.ref === a.ref && x.law_line === a.law_line)) g.rows.push(a); m.set(a.doc_id, g); return m }, new Map()).values()]
               .sort((p: any, q: any) => q.rows.filter((x: any) => x.status === 'candidate').length - p.rows.filter((x: any) => x.status === 'candidate').length || q.rows.length - p.rows.length)
             const prep = (g: any, rows: any[]) => goTab('amend', { doc_id: g.doc_id, refs: [...new Set(rows.map((x: any) => x.ref))], intent: `${[...new Set(rows.map((x: any) => x.law_line))].join(', ')}에 맞춰 ${[...new Set(rows.map((x: any) => `${x.ref}(${x.title || ''})`))].join(', ')}를 고친다.`.slice(0, 1000) })
@@ -160,14 +160,13 @@ function ImpactView({ onReset }: { onReset: () => void }) {
                     </div>
                     <ul className="divide-y">
                       {g.rows.map((a: any, k: number) => (
-                        <li key={k} className="flex flex-col gap-1 px-3 py-2.5 text-sm sm:flex-row sm:items-start sm:gap-3">
-                          <Badge className="shrink-0" variant={a.status === 'candidate' ? 'default' : 'outline'}>{LABEL[a.status]}</Badge>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium"><DocLink docId={a.doc_id} refName={a.ref}>{a.ref}({a.title})</DocLink> <span className="font-normal text-muted-foreground">← {a.law_line}</span></div>
-                            <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{a.excerpt}</div>
-                            <div className="mt-0.5 text-xs text-muted-foreground">{a.reason}</div>
+                        <li key={k} className="flex flex-col gap-2 px-3 py-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className="shrink-0" variant={a.status === 'candidate' ? 'default' : 'outline'}>{LABEL[a.status]}</Badge>
+                            <span className="font-semibold"><DocLink docId={a.doc_id} refName={a.ref}>{a.ref}({a.title})</DocLink></span>
+                            {g.rows.length > 1 && <Button size="xs" variant="ghost" className="ml-auto" onClick={() => prep(g, [a])}>이 조문만 개정 준비</Button>}
                           </div>
-                          {g.rows.length > 1 && <Button size="xs" variant="ghost" className="self-start" onClick={() => prep(g, [a])}>이 조문만 개정 준비</Button>}
+                          <WhyBox a={a} />
                         </li>
                       ))}
                     </ul>
@@ -266,6 +265,46 @@ function ImpactView({ onReset }: { onReset: () => void }) {
           </Card>
         </motion.div>
       )}
+    </div>
+  )
+}
+
+// 「왜 고쳐야 하나요」: 바뀌는 법(개정 전 → 후, 바뀐 값 강조)과 우리 규정의 지금 문장(남아 있는 옛 값 강조)을 나란히, 결론 한 줄
+const esc = (t: string) => String(t || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
+const reEsc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const mark = (text: string, words: string[], cls: string) => { let h = esc(text); for (const w of [...new Set(words.filter(Boolean))]) h = h.replace(new RegExp(reEsc(esc(w)), 'g'), `<mark class="${cls}">$&</mark>`); return h }
+// 법 조문의 개정 전·후에서 달라진 곳 앞뒤만 잘라 낸다(앞뒤 공통 부분을 빼고 남는 곳)
+function lawDiff(before: string, after: string, n = 50) {
+  // <개정 2024.10.22> 같은 연혁 표시는 바뀐 내용이 아니므로 빼고 비교한다
+  const strip = (t: string) => String(t || '').replace(/<\s*(?:개정|신설|전문개정|본조신설|제목개정|삭제)[^>]*>/g, '').replace(/\[\s*(?:본조신설|전문개정|제목개정|시행일)[^\]]*\]/g, '').replace(/\s+/g, ' ').trim()
+  const b = strip(before), a = strip(after)
+  if (!b) return { b: '', a: a.slice(0, n * 3), bw: '', aw: '' }
+  let p = 0; while (p < b.length && p < a.length && b[p] === a[p]) p++
+  let q = 0; while (q < b.length - p && q < a.length - p && b[b.length - 1 - q] === a[a.length - 1 - q]) q++
+  const st = Math.max(0, p - n), cut = (t: string, e: number) => `${st ? '…' : ''}${t.slice(st, Math.min(t.length, e + n))}${e + n < t.length ? '…' : ''}`
+  return { b: cut(b, b.length - q), a: cut(a, a.length - q), bw: b.slice(p, b.length - q).trim(), aw: a.slice(p, a.length - q).trim() }
+}
+function WhyBox({ a }: { a: any }) {
+  const it = a.item || {}, ch: { from: string; to: string }[] = it.changes || []
+  const d = lawDiff(it.before, it.after)
+  const dd = it.effective_from ? Math.round((Date.UTC(+it.effective_from.slice(0, 4), +it.effective_from.slice(4, 6) - 1, +it.effective_from.slice(6, 8)) - Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) / 86400e3) : null
+  const olds = ch.map((c) => c.from).filter((v) => String(a.excerpt || '').includes(v))
+  const why = ch.length && a.status === 'candidate' && olds.length
+    ? `법이 ${ch.map((c) => `${c.from} → ${c.to}`).join(', ')}(으)로 바뀌는데, 우리 ${a.ref}에는 아직 ${olds.join(', ')}이(가) 남아 있습니다. ${ch.find((c) => olds.includes(c.from))?.to || ''}(으)로 고쳐야 합니다.`
+    : ch.length ? `법이 ${ch.map((c) => `${c.from} → ${c.to}`).join(', ')}(으)로 바뀝니다. ${a.reason}`
+    : '법 문구가 바뀌었습니다(위). 같은 사항을 정한 우리 조문에도 이 변경이 필요한지 확인하세요.'
+  return (
+    <div className="grid gap-2 rounded-md border bg-muted/30 p-3 md:grid-cols-2">
+      <div className="min-w-0">
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold"><span>바뀌는 법</span><span className="font-normal text-muted-foreground">{it.law} {it.ref}({it.title})</span>{dd !== null && <Badge variant={dd >= 0 && dd <= 30 ? 'default' : 'outline'} className="h-5 px-1.5 text-[11px]">{dd > 0 ? `D-${dd}` : dd === 0 ? '오늘 시행' : '시행 중'} · {it.effective_from.slice(4, 6)}.{it.effective_from.slice(6, 8)}</Badge>}</div>
+        {d.b && <p className="text-xs leading-relaxed"><span className="mr-1 rounded bg-muted px-1 text-[11px] text-muted-foreground">개정 전</span><span dangerouslySetInnerHTML={{ __html: mark(d.b, [d.bw, ...ch.map((c) => c.from)], 'mk-old') }} /></p>}
+        <p className="mt-1 text-xs leading-relaxed"><span className="mr-1 rounded bg-muted px-1 text-[11px] text-muted-foreground">{d.b ? '개정 후' : '신설'}</span><span dangerouslySetInnerHTML={{ __html: mark(d.a, [d.aw, ...ch.map((c) => c.to)], 'mk-new') }} /></p>
+      </div>
+      <div className="min-w-0">
+        <div className="mb-1 text-xs font-semibold">우리 규정 지금 <span className="font-normal text-muted-foreground">{a.ref}</span></div>
+        <p className="text-xs leading-relaxed" dangerouslySetInnerHTML={{ __html: mark(a.excerpt || '', olds, 'mk-old') }} />
+      </div>
+      <p className="border-t pt-2 text-sm font-medium md:col-span-2"><span className="mr-1.5 text-primary">왜 고쳐야 하나요</span>{why}</p>
     </div>
   )
 }

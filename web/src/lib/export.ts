@@ -11,21 +11,53 @@ export function cleanHtml(html: string) {
   walk(d); return d.innerHTML
 }
 const plain = (html: string) => { const d = document.createElement('div'); d.innerHTML = String(html).replace(/<br\s*\/?>/g, '\n'); return d.textContent || '' }
+// Markdown 표 칸: 한 줄로, 바뀐 부분(<u>)은 굵게
+const mdCell = (h: string) => plain(String(h || '').replace(/<u>([\s\S]*?)<\/u>/g, '\u27E6$1\u27E7')).replace(/\s*\n+\s*/g, ' ').replace(/\|/g, '\\|').replace(/\u27E6\s*([\s\S]*?)\s*\u27E7/g, (_, t: string) => (t.trim() ? `**${t.trim()}**` : ''))
+// 바뀐 곳 요약: 대비표 행마다 밑줄(<u>) 친 부분을 현행 → 개정으로 뽑는다(화면·내려받기 공통)
+export type Change = { ref: string; kind: '개정' | '신설' | '삭제'; old: string[]; neu: string[] }
+const uParts = (h: string) => [...String(h || '').matchAll(/<u>([\s\S]*?)<\/u>/g)].map((m) => plain(m[1]).replace(/\s+/g, ' ').trim()).filter(Boolean)
+export function changeList(rows: Row[]): Change[] {
+  const by = new Map<string, Change>()
+  for (const r of rows || []) {
+    const n = plain(r.newHtml).trim(), o = plain(r.oldHtml).trim()
+    if (/^\(현행과 같음\)$/.test(n)) continue
+    const kind: Change['kind'] = /^<?\s*신\s*설\s*>?$/.test(o) ? '신설' : /^<?\s*삭\s*제\s*>?$/.test(n) ? '삭제' : '개정'
+    const c = by.get(r.ref) || { ref: r.ref, kind, old: [], neu: [] }
+    c.old.push(...uParts(r.oldHtml)); c.neu.push(...uParts(r.newHtml)); by.set(r.ref, c)
+  }
+  return [...by.values()].filter((c) => c.kind !== '개정' || c.old.length || c.neu.length)
+}
+const clipT = (t: string, n = 60) => (t.length > n ? t.slice(0, n) + '…' : t)
+export const changeLine = (c: Change) => c.kind === '신설' ? `${c.ref} 신설: ${clipT(c.neu.join(' '), 80)}` : c.kind === '삭제' ? `${c.ref} 삭제` : `${c.ref}: ${c.old.length ? `「${clipT(c.old.join(' … '))}」` : '(추가)'} → ${c.neu.length ? `「${clipT(c.neu.join(' … '))}」` : '(삭제)'}`
+// 개정 후 전문을 조문 덩어리로 나누고 〈개정〉〈신설〉〈삭제〉〈조 번호 이동〉 표시가 있는 덩어리를 찾는다
+// HTML 안에서 바뀐 낱말을 노란 칠(굵게)로
+const markHtml = (h: string, words: string[]) => { const ws = [...new Set(words.filter((w) => w && w.length >= 2).map(esc))].sort((a, b) => b.length - a.length); return ws.length ? h.replace(new RegExp(ws.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g'), (m) => `<b style="background:#fde047">${m}</b>`) : h }
+export const TAG_RE = /〈(개정|신설|삭제|조 번호 이동|이번 개정)〉/
+export function fullTextBlocks(body: string) {
+  const out: { text: string; tag: string | null }[] = []
+  for (const line of String(body || '').split('\n')) {
+    const start = /^\s*(제\s*\d+\s*조(의\s*\d+)?|부\s*칙|\[?별표|제\s*\d+\s*장)/.test(line) || !out.length
+    if (start) out.push({ text: line, tag: (line.match(TAG_RE) || [])[1] || null }); else out[out.length - 1].text += '\n' + line
+  }
+  return out
+}
 const ev = (ds: DocSet) => ds.evidence.map((e, i) => `${i + 1}. ${e.label} — ${e.doc_id}${e.ref ? ' ' + e.ref : ''}${e.edition ? ` (${e.edition})` : ''}`)
+const summaryMd = (ds: DocSet) => { const cs = changeList(ds.sections.filter((s) => s.id === 'comparison').flatMap((s) => s.rows || [])); return cs.length ? ['## 바뀐 곳 한눈에', cs.map((c) => `- ${changeLine(c)}`).join('\n')] : [] }
+const boldTags = (t: string) => String(t || '').replace(new RegExp(TAG_RE.source, 'g'), '**$&**')
 export function toMd(ds: DocSet) {
-  return [`# ${ds.title} (${ds.kind}안)`, `> ${NOTICE}`, ...ds.sections.flatMap((s) => [`## ${s.title}`, s.rows ? ['| 현행 | 개정안 |', '| --- | --- |', ...s.rows.map((r) => `| ${cleanHtml(r.oldHtml).replace(/\|/g, '\\|')} | ${cleanHtml(r.newHtml).replace(/\|/g, '\\|')} |`)].join('\n') : s.body || '']), '## 근거 자료', ...ev(ds), `---\n${NOTICE}`].join('\n\n') + '\n'
+  return [`# ${ds.title} (${ds.kind}안)`, `> ${NOTICE}`, ...summaryMd(ds), ...ds.sections.flatMap((s) => [`## ${s.title}`, s.rows ? ['| 현행 | 개정안 (바뀐 부분 굵게) |', '| --- | --- |', ...s.rows.map((r) => `| ${mdCell(r.oldHtml)} | ${mdCell(r.newHtml)} |`)].join('\n') : s.id === 'full_text' ? boldTags(s.body || '') : s.body || '']), '## 근거 자료', ...ev(ds), `---\n${NOTICE}`].join('\n\n') + '\n'
 }
 export function toHtml(ds: DocSet) {
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(ds.title)}</title><style>body{font-family:"Malgun Gothic","Noto Sans KR",sans-serif;max-width:900px;margin:24px auto;line-height:1.7}h1{text-align:center;font-size:22px}h2{font-size:17px;border-bottom:2px solid #333;margin-top:28px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #444;padding:6px 8px;vertical-align:top;font-size:14px}th{background:#eee}.pre{white-space:pre-wrap}.n{border:1px solid #c33;color:#900;padding:6px 10px;font-size:13px}u{text-decoration-thickness:2px}</style></head><body><h1>${esc(ds.title)} (${esc(ds.kind)}안)</h1><p class="n">${NOTICE}</p>${ds.sections.map((s) => `<h2>${esc(s.title)}</h2>${s.rows ? `<table><thead><tr><th>${esc(s.heads?.[0] || '현 행')}</th><th>${esc(s.heads?.[1] || '개 정 안')}</th></tr></thead><tbody>${s.rows.map((r) => `<tr><td>${cleanHtml(r.oldHtml)}</td><td>${cleanHtml(r.newHtml)}</td></tr>`).join('')}</tbody></table>` : `<div class="pre">${esc(s.body)}</div>`}`).join('')}<h2>근거 자료</h2><ol>${ds.evidence.map((e) => `<li>${esc(e.label)} — ${esc(e.doc_id)} ${esc(e.ref || '')} ${e.edition ? `(${esc(e.edition)})` : ''}</li>`).join('')}</ol></body></html>`
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${esc(ds.title)}</title><style>body{font-family:"Malgun Gothic","Noto Sans KR",sans-serif;max-width:900px;margin:24px auto;line-height:1.7}h1{text-align:center;font-size:22px}h2{font-size:17px;border-bottom:2px solid #333;margin-top:28px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #444;padding:6px 8px;vertical-align:top;font-size:14px}th{background:#eee}.pre{white-space:pre-wrap}.n{border:1px solid #c33;color:#900;padding:6px 10px;font-size:13px}u{text-decoration-thickness:2px;text-underline-offset:3px}td:first-child u{background:#fde2e2;text-decoration-color:#dc2626}td:nth-child(2) u{background:#fff1a8;font-weight:700;text-decoration-color:#ca8a04}.lg{font-size:12px;color:#555;margin:4px 0}.lg i{font-style:normal;padding:0 4px;border-radius:3px}.chg{background:#fff8d6;border-left:4px solid #eab308;padding:2px 8px;margin:6px 0;white-space:pre-wrap}.tag{display:inline-block;background:#ca8a04;color:#fff;border-radius:4px;padding:0 6px;font-size:12px;font-weight:700}.sum{background:#f6f8fb;border:1px solid #cfd6e4;border-radius:6px;padding:8px 14px}.sum li{margin:2px 0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body><h1>${esc(ds.title)} (${esc(ds.kind)}안)</h1><p class="n">${NOTICE}</p>${(() => { const cs = changeList(ds.sections.filter((s) => s.id === 'comparison').flatMap((s) => s.rows || [])); return cs.length ? `<h2>바뀐 곳 한눈에</h2><ul class="sum">${cs.map((c) => `<li>${esc(changeLine(c))}</li>`).join('')}</ul>` : '' })()}${ds.sections.map((s) => `<h2>${esc(s.title)}</h2>${s.rows ? `<p class="lg"><i style="background:#fde2e2">빨강</i> 현행에서 바뀌는 부분 · <i style="background:#fff1a8;font-weight:700">노랑·굵게</i> 개정안에서 새로 들어간 부분</p><table><thead><tr><th>${esc(s.heads?.[0] || '현 행')}</th><th>${esc(s.heads?.[1] || '개 정 안')}</th></tr></thead><tbody>${s.rows.map((r) => `<tr><td>${cleanHtml(r.oldHtml)}</td><td>${cleanHtml(r.newHtml)}</td></tr>`).join('')}</tbody></table>` : s.id === 'full_text' ? `<p class="lg">노란 칸이 이번에 바뀐 조문입니다.</p>${fullTextBlocks(s.body || '').map((b) => b.tag ? `<div class="chg">${markHtml(esc(b.text), changeList(ds.sections.filter((x) => x.id === 'comparison').flatMap((x) => x.rows || [])).flatMap((c) => c.neu)).replace(new RegExp(TAG_RE.source, 'g'), '<span class="tag">$&</span>')}</div>` : `<div class="pre">${esc(b.text)}</div>`).join('')}` : `<div class="pre">${esc(s.body)}</div>`}`).join('')}<h2>근거 자료</h2><ol>${ds.evidence.map((e) => `<li>${esc(e.label)} — ${esc(e.doc_id)} ${esc(e.ref || '')} ${e.edition ? `(${esc(e.edition)})` : ''}</li>`).join('')}</ol></body></html>`
 }
-export function toCsv(rows: Row[]) { const q = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s); return '﻿조문,현행,개정안\r\n' + rows.map((r) => [r.ref, plain(r.oldHtml), plain(r.newHtml)].map(q).join(',') + '\r\n').join('') }
+export function toCsv(rows: Row[]) { const q = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s); return '﻿조문,현행,개정안,바뀐 부분(현행 → 개정)\r\n' + rows.map((r) => { const o = uParts(r.oldHtml), n = uParts(r.newHtml); return [r.ref, plain(r.oldHtml), plain(r.newHtml), o.length || n.length ? `${o.join(' … ') || '(추가)'} → ${n.join(' … ') || '(삭제)'}` : ''].map(q).join(',') + '\r\n' }).join('') }
 export function download(name: string, text: string, type: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: `${type};charset=utf-8` })); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 1000) }
 export function tableCsv(rows: Record<string, unknown>[], cols: [string, string][]) { const q = (s: string) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s); return '﻿' + cols.map((c) => c[1]).join(',') + '\r\n' + rows.map((r) => cols.map(([k]) => q(String(r[k] ?? ''))).join(',') + '\r\n').join('') }
 // 한글(hwpx): 본문 줄을 문단으로 살린 Markdown 을 서버(문서 변환 서비스)로 보내 hwpx 로 받는다
 export function toMdHwpx(ds: DocSet) {
   // 한글 문서 변환기는 밑줄을 지원하지 않아, 대비표에서 바뀐 부분(<u>)은 굵게(**) 바꿔 표시한다
   const cell = (h: string) => plain(String(h || '').replace(/<u>([\s\S]*?)<\/u>/g, '\u27E6$1\u27E7')).replace(/\s*\n+\s*/g, ' ').replace(/\|/g, '\\|').replace(/\u27E6\s*([\s\S]*?)\s*\u27E7/g, (_, t: string) => (t.trim() ? `**${t.trim()}**` : ''))
-  return [`# ${ds.title} (${ds.kind}안)`, `> ${NOTICE}`, ...ds.sections.flatMap((s) => [`## ${s.title}`, s.rows ? ['| 현행 | 개정안(바뀐 부분 굵게) |', '| --- | --- |', ...s.rows.map((r) => `| ${cell(r.oldHtml)} | ${cell(r.newHtml)} |`)].join('\n') : String(s.body || '').split('\n').filter((l) => l.trim()).join('\n\n')])].join('\n\n')
+  return [`# ${ds.title} (${ds.kind}안)`, `> ${NOTICE}`, ...summaryMd(ds), ...ds.sections.flatMap((s) => [`## ${s.title}`, s.rows ? ['| 현행 | 개정안(바뀐 부분 굵게) |', '| --- | --- |', ...s.rows.map((r) => `| ${cell(r.oldHtml)} | ${cell(r.newHtml)} |`)].join('\n') : (s.id === 'full_text' ? boldTags(s.body || '') : String(s.body || '')).split('\n').filter((l) => l.trim()).join('\n\n')])].join('\n\n')
 }
 export async function downloadHwpx(name: string, ds: DocSet) {
   const r = await fetch('/api/hwpx', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ markdown: toMdHwpx(ds) }) })
