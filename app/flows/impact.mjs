@@ -98,7 +98,8 @@ export async function runImpact(ctx) {
     // 주제어 그대로 + 긴 낱말을 앞 두 글자로 줄인 변형("배우자 출산휴가" → "배우자 출산")
     const variants = [...new Set([change.topic, change.topic.split(/\s+/).map((w) => (w.length >= 4 ? w.slice(0, 2) : w)).join(' ')])].filter(Boolean);
     if (!govType) for (const q of variants) { try { const res = await sources.searchRegs({ keyword: q, corpus: 'bylaws', body: true, inst, limit: 50 }); if (res.degraded) errors.push('주제 검색 일부'); for (const r of res.rows) add(r, '같은 주제'); } catch { errors.push('주제 검색'); } }
-    if (!govType && after.doc && /^legal:/.test(after.doc.doc_id) && sources.mcp?.enabled) {
+    // MCP 피인용 조회는 기관 범위가 있어야 한다(없으면 MCP 가 거절 — 헛호출을 하지 않는다)
+    if (!govType && inst && after.doc && /^legal:/.test(after.doc.doc_id) && sources.mcp?.enabled) {
       const rel = await sources.related({ doc_id: after.doc.doc_id, art_no: after.art.no, art_sub: after.art.sub || undefined, direction: 'incoming', corpus: 'bylaws', inst, limit: 30 });
       for (const r of rel?.incoming || []) add({ ...r, art_ref: r.art_ref || r.ref }, 'MCP 인용관계');
     }

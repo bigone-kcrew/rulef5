@@ -99,3 +99,36 @@ test('a new branch article goes after the existing branches and reports where it
   const r2 = renumber(doc, [{ op: 'insert', after: '제45조의4', renumber: true }]);
   assert.equal(r2.inserted[0].after, '제45조의4');
 });
+
+test('radar puts our articles that cite the changed law article first (MCP find_citing) and skips ambiguous law names', async () => {
+  const v1 = day(-200), v2 = day(40);
+  const lawDoc = (body, eff) => ({ doc_id: `law:law:${eff}`, title: '테스트법', edition: { effective_from: eff }, articles: [{ ref: '제5조', title: '휴게', body, section: '본칙' }] });
+  const ours = { doc_id: 'bylaws:ours', title: '취업규칙', inst: '가공단', articles: [{ ref: '제12조', title: '휴게시간', section: '본칙', body: '휴게시간은 테스트법 제5조에 따라 30분으로 한다.' }] };
+  const calls = [];
+  const sources = {
+    rest: { search: async () => ({ rows: [] }) }, loadDoc: async (id) => (id === 'bylaws:ours' ? ours : null),
+    searchRegs: async () => ({ rows: [] }),
+    citing: async (q) => { calls.push(q); return { rows: [{ doc_id: 'bylaws:ours', corpus: 'bylaws', inst_name: '가공단', doc_title: '취업규칙', art_ref: '제12조', cited: '테스트법 제5조' }, { doc_id: 'bylaws:ours', corpus: 'bylaws', art_ref: null }] }; },
+    lawGo: { enabled: true, timeline: async () => [{ mst: '1', eff: v1 }, { mst: '2', eff: v2 }], textAt: async (mst, eff) => lawDoc(mst === '2' ? '근로시간 4시간마다 30분 이상 휴게를 주어야 하며 요청 시 예외로 한다.' : '근로시간 4시간마다 30분 이상 휴게를 주어야 한다.', eff) },
+  };
+  const jobs = createJobs();
+  const j = await until(jobs, jobs.start('radar', { laws: ['테스트법'], inst: '가공단' }, runRadar, { deps: { sources, llm: null } }));
+  const hit = j.result.items[0].affected[0];
+  assert.equal(hit.ref, '제12조'); assert.equal(hit.cites, true); assert.match(hit.reason, /「테스트법 제5조」를 직접 인용/);
+  assert.deepEqual(hit.amend.refs, ['제12조']); assert.deepEqual(calls[0], { law: '테스트법', art: '제5조', inst: '가공단', corpus: 'bylaws', limit: 20 });
+  const amb = { ...sources, citing: async () => ({ ambiguous: true, candidates: [{ law_key: '가법' }], rows: [] }) };
+  const js2 = createJobs(); const id2 = js2.start('radar', { laws: ['테스트법'], inst: '가공단' }, runRadar, { deps: { sources: amb, llm: null } });
+  const r2 = await until(js2, id2); assert.equal(r2.status, 'done'); assert.ok(r2.logs.some((l) => /여러 법령과 맞아 건너뜀/.test(l.text)));
+});
+
+import { createAlioMcp } from '../lib/alio-mcp.mjs';
+test('MCP citing retries an ambiguous abbreviation only when a candidate equals the exact name', async () => {
+  const bodies = [];
+  const reply = (obj) => ({ ok: true, text: async () => JSON.stringify({ result: { content: [{ type: 'text', text: JSON.stringify(obj) }] } }) });
+  const fetchImpl = async (_u, init) => { const a = JSON.parse(init.body).params.arguments; bodies.push(a); return reply(a.law === '국가공무원법' ? { resolved: true, rows: [{ doc_id: 'bylaws:x', art_ref: '제3조' }] } : { ambiguous: true, candidates: [{ law_key: '국가공무원법' }, { law_key: '지방공무원법' }], rows: [] }); };
+  const m = createAlioMcp({ url: 'https://mcp.example', fetchImpl });
+  const ok = await m.citing({ law: '국가 공무원법', art: '제3조', inst: '가' });
+  assert.equal(ok.rows.length, 1); assert.equal(bodies[1].law, '국가공무원법');
+  const amb = await m.citing({ law: '공무원법' });
+  assert.equal(amb.ambiguous, true); assert.equal(amb.candidates.length, 2);
+});

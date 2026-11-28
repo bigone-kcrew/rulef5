@@ -62,6 +62,7 @@ export function createSources(env = process.env, fetchImpl = fetch, { cacheDir =
     searchRegs: (q) => rest.search(q),
     countInst: (k) => rest.countInst(k),
     related: (args) => (mcp.enabled ? mcp.related(args) : Promise.resolve(null)),
+    citing: (args) => (mcp.enabled ? mcp.citing(args) : Promise.resolve(null)),
     registerUpload(doc) { uploads.set(doc.doc_id, doc); if (uploads.size > 2000) uploads.delete(uploads.keys().next().value); return doc; },
     dropUploads(prefix) { for (const k of [...uploads.keys()]) if (k.startsWith(prefix)) uploads.delete(k); },
     withLawOc: (userOc) => (userOc ? userView(userOc) : base),

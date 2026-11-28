@@ -26,5 +26,13 @@ export function createAlioMcp({ url = null, key = null, fetchImpl = fetch, timeo
       return { ...r, incoming: (r.incoming || []).filter((x) => x.scope !== 'same_doc' && x.doc_id !== doc_id).map(norm) };
     },
     compare: (a, b) => call('compare_documents', { a, b, include_body: true, max_changes: 60 }),
+    // find_citing: 이 법령(·조문)을 인용하는 내규·단체협약 조문(「법령명 + 제N조」 표기 기준, 약칭 해소). 약칭이 여러 법령과 맞으면(ambiguous)
+    // 공백 없는 정식명과 같은 후보가 있을 때만 그것으로 다시 부르고, 아니면 { ambiguous, candidates } 로 돌려준다
+    async citing({ law, art, corpus, inst, limit = 20 }, retry = true) {
+      const r = await call('find_citing', Object.fromEntries(Object.entries({ law, art, corpus, inst, limit }).filter(([, v]) => v !== undefined && v !== null && v !== '')));
+      if (!r) return null;
+      if (r.ambiguous) { const key = String(law || '').replace(/[\s·ㆍ]/g, ''); const c = (r.candidates || []).find((x) => x.law_key === key); return c && retry ? this.citing({ law: c.law_key, art, corpus, inst, limit }, false) : { ambiguous: true, candidates: r.candidates || [], rows: [] }; }
+      return { ...r, rows: (r.rows || []).filter((x) => x.doc_id) };
+    },
   };
 }

@@ -23,7 +23,7 @@ export async function runRadar(ctx) {
   let picked = Array.isArray(input.laws) && input.laws.length ? input.laws : null;
   if (!picked && sources.lawGo?.enabled) { try { const sg = await suggestLaws(sources, { org_type: input.org_type, limit: 3 }); if (sg.items.length) { picked = sg.items.map((x) => x.law); ctx.log(`감시 법령 자동 선택(법제처 시행일 기준): ${picked.join(', ')}`); } } catch { /* 기본 법령으로 */ } }
   const laws = (picked || DEFAULT_BY_TYPE[input.org_type] || DEFAULT_LAWS).map((x) => String(x).slice(0, 60)).slice(0, 3);
-  const items = [], errors = []; let lawAsOf = null;
+  const items = [], errors = []; let lawAsOf = null; const citedDocs = new Map();
   for (const law of laws) {
     await ctx.step(`판본 비교 · ${law}`, async (s) => {
       let rows;
@@ -59,6 +59,23 @@ export async function runRadar(ctx) {
           const affected = [];
           // 지자체·부처는 자치법규·행정규칙(법제처) 본문에서 같은 주제를 찾는다
           const govT = input.org_type === 'local-gov' ? 'ordin' : input.org_type === 'central-ministry' ? 'admrul' : null;
+          // ① 이 법령 조문을 「법령명 + 제N조」로 직접 인용하는 우리 기관 내규(ALIO MCP find_citing, 약칭 해소) — 가장 확실한 후보라 먼저 둔다
+          if (!govT && input.inst && sources.citing) {
+            try {
+              const cr = await sources.citing({ law: nd.title || law, art: a.ref, inst: input.inst, corpus: 'bylaws', limit: 20 });
+              if (cr?.ambiguous) ctx.log(`인용 조회: 법령명 「${nd.title || law}」이 여러 법령과 맞아 건너뜀(${(cr.candidates || []).map((c) => c.law_key).slice(0, 3).join('·')})`);
+              for (const x of (cr?.rows || []).filter((y) => y.art_ref && y.corpus !== 'ca').slice(0, 8)) {
+                let d = citedDocs.get(x.doc_id); if (!d) { try { d = await sources.loadDoc(x.doc_id); } catch { d = null; } citedDocs.set(x.doc_id, d); }
+                const art = d?.articles.find((y) => y.ref === x.art_ref && y.section === '본칙'); if (!art) continue;
+                const jd0 = ch.length ? judge(art.body, ch, a.title, art.title || '') : null;
+                if (jd0?.status === 'reflected') continue;
+                const lawLine0 = `${nd.title || law} ${a.ref}(${a.title}) ${before ? '개정' : '신설'}(${ymd(sv.eff)} 시행${ch.length ? `: ${ch.map((c) => `${c.from}→${c.to}`).join(', ')}` : ''})`;
+                const reason = `이 조문은 「${String(x.cited || `${nd.title || law} ${a.ref}`).replace(/[「」]/g, '').replace(/\s+/g, ' ').trim()}」를 직접 인용합니다. ${jd0 && !/직접 정한 문장이 없습니다/.test(jd0.reason) ? jd0.reason : '바뀐 법 조문의 내용을 반영해야 하는지 확인하세요.'}`;
+                affected.push({ inst: x.inst_name || d.inst, doc_id: x.doc_id, doc_title: x.doc_title || d.title, ref: x.art_ref, title: art.title, status: jd0?.status === 'candidate' ? 'candidate' : 'check', reason, cites: true, excerpt: around(art.body, ch.map((c) => c.from).find((v) => art.body.includes(v)) || a.ref, 110), edition: editionLabel(d), law_line: lawLine0,
+                  amend: { doc_id: x.doc_id, refs: [x.art_ref], intent: `${lawLine0}에 맞춰 ${x.art_ref}(${art.title || ''})를 고친다.`.slice(0, 600) } });
+              }
+            } catch { errors.push(`${law} ${a.ref} 인용 조회`); }
+          }
           // 수치가 바뀐 조문은 모든 범위에서, 문구만 바뀐 조문은 우리 기관을 정했을 때만(전체 기관이면 너무 많다) 같은 주제 조문을 찾는다
           // 정의·벌칙·과태료처럼 어느 규정에나 있는 제목은 문구 변경만으로는 찾지 않는다(엉뚱한 후보가 많아짐)
           if (ch.length || (input.inst && !GENERIC.test(a.title || ''))) {
@@ -69,7 +86,7 @@ export async function runRadar(ctx) {
                 // 우리 쪽 조문도 목적·정의·부칙(적용례·경과조치) 같은 일반 조문은 후보에서 뺀다
                 if (!x.art_ref || x.section === '부칙' || GENERIC.test(x.art_title || '') || /적용례|경과조치|시행일/.test(x.art_title || '')) continue;
                 const jd = ch.length ? judge(x.body, ch, a.title, x.art_title || '') : { status: 'check', reason: '법령 문구가 바뀐 조문과 같은 주제를 정한 조문입니다. 바뀐 내용이 우리 규정에도 필요한지 확인하세요.' };
-                if (jd.status === 'reflected' || /직접 정한 문장이 없습니다/.test(jd.reason)) continue;
+                if (jd.status === 'reflected' || /직접 정한 문장이 없습니다/.test(jd.reason) || affected.some((y) => y.doc_id === x.doc_id && y.ref === x.art_ref)) continue;
                 affected.push({ inst: x.inst_name, doc_id: x.doc_id, doc_title: x.doc_title, ref: x.art_ref, title: x.art_title, status: jd.status, reason: jd.reason, excerpt: around(x.body, ch.map((c) => c.from).find((v) => String(x.body).includes(v)) || a.title, 110), edition: editionLabel(x), law_line: lawLine,
                   amend: { doc_id: x.doc_id, refs: [x.art_ref], intent: `${lawLine}에 맞춰 ${x.art_ref}(${x.art_title || ''})를 고친다.`.slice(0, 600) } });
               }
